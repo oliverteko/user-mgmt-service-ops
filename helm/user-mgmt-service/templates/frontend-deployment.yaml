@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "user-mgmt-service.componentLabels" (dict "component" "frontend" "context" $) | nindent 4 }}
+spec:
+  replicas: {{ .Values.frontend.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "user-mgmt-service.componentSelectorLabels" (dict "component" "frontend" "context" $) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "user-mgmt-service.componentSelectorLabels" (dict "component" "frontend" "context" $) | nindent 8 }}
+    spec:
+      containers:
+        - name: frontend
+          image: {{ include "user-mgmt-service.image" (dict "image" .Values.frontend.image "context" $) }}
+          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          ports:
+            - containerPort: 3000
+          env:
+            - name: INTERNAL_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: INTERNAL_API_URL
+          # "/" is not gated by middleware.ts and doesn't depend on the backend,
+          # so it's a safe, unauthenticated probe target.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: {{ .Values.frontend.probes.initialDelaySeconds }}
+            periodSeconds: {{ .Values.frontend.probes.periodSeconds }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: {{ .Values.frontend.probes.initialDelaySeconds }}
+            periodSeconds: {{ .Values.frontend.probes.periodSeconds }}
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}

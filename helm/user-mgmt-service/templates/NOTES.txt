@@ -1,0 +1,19 @@
+user-mgmt-service has been deployed to namespace {{ .Values.namespace }}.
+
+{{- if .Values.ingress.enabled }}
+App URL (find the external IP via `kubectl get svc -n traefik`):
+  http://<traefik-external-ip>/
+{{- else }}
+Ingress is disabled. Use `kubectl port-forward` to reach the services, e.g.:
+  kubectl -n {{ .Values.namespace }} port-forward svc/frontend 3000:{{ .Values.frontend.service.port }}
+  kubectl -n {{ .Values.namespace }} port-forward svc/backend 8080:{{ .Values.backend.service.port }}
+{{- end }}
+
+{{- if .Values.secret.create }}
+{{- $placeholder := "REPLACE_ME" }}
+{{- if or (eq .Values.secret.dbPassword $placeholder) (eq .Values.secret.jwtSecret $placeholder) }}
+WARNING: secret.dbPassword/jwtSecret are still set to the "REPLACE_ME"
+placeholder. Override them at install/upgrade time (--set or an untracked
+values file) before using this release for anything real.
+{{- end }}
+{{- end }}

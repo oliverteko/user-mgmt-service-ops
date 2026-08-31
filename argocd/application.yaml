@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: user-mgmt-service
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/oliverteko/user-mgmt-service-ops.git
+    targetRevision: main
+    path: helm/user-mgmt-service
+    helm:
+      parameters:
+        - name: secret.create
+          value: "false"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: user-mgmt
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

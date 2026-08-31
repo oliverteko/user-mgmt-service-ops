@@ -1,0 +1,24 @@
+{{- if .Values.ingress.enabled }}
+# No host set: all backend calls are proxied server-side by the frontend
+# (see frontend/app/api/*/route.ts), so nothing needs to know the cluster's
+# external IP ahead of time. A hostless rule matches any incoming Host header.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: frontend-ingress
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "user-mgmt-service.componentLabels" (dict "component" "frontend" "context" $) | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: {{ .Values.frontend.service.port }}
+{{- end }}

@@ -1,0 +1,111 @@
+# Default values for user-mgmt-service.
+# Production-like defaults matching the current DigitalOcean Kubernetes (DOKS) deployment.
+# Override per environment with -f values-<env>.yaml and/or --set.
+
+namespace: user-mgmt
+createNamespace: true
+
+nameOverride: ""
+fullnameOverride: ""
+
+postgres:
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+  service:
+    port: 5432
+  persistence:
+    size: 1Gi
+    accessMode: ReadWriteOnce
+    # Empty = use the cluster's default StorageClass.
+    storageClassName: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  probes:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 5
+
+backend:
+  image:
+    repository: ghcr.io/oliverteko/user-mgmt-service-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  service:
+    port: 8080
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  probes:
+    # tcpSocket, not httpGet: no public unauthenticated GET endpoint exists
+    # (only POST /users/login and /users/register are permitAll), so an
+    # httpGet probe would falsely report the pod as unhealthy.
+    initialDelaySeconds: 25
+    periodSeconds: 10
+    failureThreshold: 6
+
+frontend:
+  image:
+    repository: ghcr.io/oliverteko/user-mgmt-service-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  service:
+    port: 3000
+  probes:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  env:
+    # Runtime env var, server-side only. Maps to INTERNAL_API_URL. All backend
+    # calls are proxied server-side by the frontend's own API routes
+    # (frontend/app/api/*/route.ts) - the browser never talks to the backend
+    # directly, so no public/build-time API URL is needed at all.
+    internalApiUrl: "http://backend:8080"
+
+config:
+  databaseName: postgres
+  springDatasourceUrl: "jdbc:postgresql://postgres:5432/postgres"
+  springJpaHibernateDdlAuto: update
+  jwtIssuer: Spring
+  jwtExpirationMillis: "86400000"
+
+secret:
+  # true  = this chart renders a Secret from the values below (defaults are
+  #         placeholders only - override via --set or an untracked values file
+  #         at install/upgrade time, never commit real values).
+  # false = no Secret is rendered; `secret.name` must already exist in the
+  #         cluster (e.g. created imperatively via `kubectl create secret
+  #         generic`), matching the current production workflow.
+  create: true
+  name: app-secret
+  dbUsername: "REPLACE_ME"
+  dbPassword: "REPLACE_ME"
+  jwtSecret: "REPLACE_ME"
+
+ingress:
+  enabled: true
+  className: traefik
+  # No host: the frontend-ingress rule has no host restriction (matches any
+  # incoming Host header), since the backend is no longer publicly exposed -
+  # the frontend proxies all backend calls server-side. No IP/hostname needs
+  # to be known ahead of time, so this never needs updating after a cluster
+  # recreation.

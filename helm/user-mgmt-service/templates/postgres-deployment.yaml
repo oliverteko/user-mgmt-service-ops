@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "user-mgmt-service.componentLabels" (dict "component" "postgres" "context" $) | nindent 4 }}
+spec:
+  replicas: 1
+  # Recreate (not RollingUpdate): the ReadWriteOnce PVC can only be mounted by
+  # one pod at a time, so a rolling update would leave the new pod stuck Pending.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "user-mgmt-service.componentSelectorLabels" (dict "component" "postgres" "context" $) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "user-mgmt-service.componentSelectorLabels" (dict "component" "postgres" "context" $) | nindent 8 }}
+    spec:
+      containers:
+        - name: postgres
+          image: {{ include "user-mgmt-service.image" (dict "image" .Values.postgres.image "context" $) }}
+          imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: DATABASE_NAME
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secret.name }}
+                  key: DB_USERNAME
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secret.name }}
+                  key: DB_PASSWORD
+            # Subdirectory, not the mount root: some CSI volumes create a
+            # lost+found dir at the mount root which makes initdb fail otherwise.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              # $(POSTGRES_USER)/$(POSTGRES_DB) are Kubernetes pod env var
+              # references, not Helm template syntax - keep them verbatim.
+              command: ["pg_isready", "-U", "$(POSTGRES_USER)", "-d", "$(POSTGRES_DB)"]
+            initialDelaySeconds: {{ .Values.postgres.probes.initialDelaySeconds }}
+            periodSeconds: {{ .Values.postgres.probes.periodSeconds }}
+            timeoutSeconds: {{ .Values.postgres.probes.timeoutSeconds }}
+            failureThreshold: {{ .Values.postgres.probes.failureThreshold }}
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "$(POSTGRES_USER)", "-d", "$(POSTGRES_DB)"]
+            initialDelaySeconds: {{ .Values.postgres.probes.initialDelaySeconds }}
+            periodSeconds: {{ .Values.postgres.probes.periodSeconds }}
+            timeoutSeconds: {{ .Values.postgres.probes.timeoutSeconds }}
+            failureThreshold: {{ .Values.postgres.probes.failureThreshold }}
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-data
