@@ -1,7 +1,10 @@
 {{- if .Values.ingress.enabled }}
-# No host set: all backend calls are proxied server-side by the frontend
-# (see frontend/app/api/*/route.ts), so nothing needs to know the cluster's
-# external IP ahead of time. A hostless rule matches any incoming Host header.
+# ingress.host empty (default): hostless rule matches any incoming Host
+# header - fine for a single environment on the cluster, since all backend
+# calls are proxied server-side by the frontend (see frontend/app/api/*/route.ts)
+# and nothing needs to know the external IP ahead of time. Once more than one
+# environment shares the same Ingress controller (e.g. staging + prod), set
+# ingress.host per environment so their rules don't both match everything.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -12,7 +15,10 @@ metadata:
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   rules:
-    - http:
+    - {{- if .Values.ingress.host }}
+      host: {{ .Values.ingress.host }}
+      {{- end }}
+      http:
         paths:
           - path: /
             pathType: Prefix

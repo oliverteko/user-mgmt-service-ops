@@ -1,0 +1,48 @@
+# Staging overlay - only overrides what differs from values.yaml. Use with:
+#   helm upgrade --install user-mgmt-service ./helm/user-mgmt-service -f values-staging.yaml
+# (in practice applied by ArgoCD via argocd/application-staging.yaml)
+
+namespace: user-mgmt-staging
+
+postgres:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+backend:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+    limits:
+      cpu: 250m
+      memory: 384Mi
+
+frontend:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 96Mi
+    limits:
+      cpu: 150m
+      memory: 192Mi
+
+ingress:
+  # Distinct from prod's hostless rule so both can coexist behind the same
+  # Traefik controller. Test via Host header or an /etc/hosts entry pointing
+  # at the Traefik LoadBalancer IP (see k8s/README.md in the app repo).
+  host: staging.user-mgmt.local
+
+resourceQuota:
+  requests:
+    cpu: "1"
+    memory: 1Gi
+  limits:
+    cpu: "2"
+    memory: 2Gi

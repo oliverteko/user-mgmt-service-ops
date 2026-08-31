@@ -1,30 +1,33 @@
 # user-mgmt-service-ops
 
-Ops Repository für `user-mgmt-service` — GitOps-Deployment via [ArgoCD](https://argo-cd.readthedocs.io/). Enthält den Helm Chart (`helm/user-mgmt-service/`, verschoben aus dem [App-Repo](https://github.com/oliverteko/user_mgmt_service)) und das ArgoCD Application Manifest (`argocd/application.yaml`).
+Ops Repository für `user-mgmt-service` — GitOps-Deployment via [ArgoCD](https://argo-cd.readthedocs.io/). Enthält den Helm Chart (`helm/user-mgmt-service/`, verschoben aus dem [App-Repo](https://github.com/oliverteko/user_mgmt_service)) und die ArgoCD Application Manifests (`argocd/application-staging.yaml`, `argocd/application-prod.yaml`).
 
 Dieses Repo ist die **einzige Quelle der Wahrheit** für den Cluster-Zustand von `user-mgmt-service`: ArgoCD beobachtet `main` und gleicht den Cluster automatisch mit dem hier deklarierten Zustand ab (`syncPolicy.automated` mit `prune` + `selfHeal`).
 
 ## Architektur
 
 - **Namespace `argocd`**: ArgoCD selbst (Controller, Server, Repo-Server, Dashboard).
-- **Namespace `user-mgmt`**: die eigentliche App (Backend, Frontend, Postgres) — von ArgoCD über den Helm Chart in `helm/user-mgmt-service/` gerendert und angewendet, komplett getrennt vom ArgoCD-Namespace.
-- **`app-secret`** wird bewusst **nicht** von ArgoCD verwaltet (`secret.create: false` in `argocd/application.yaml`) — echte Zugangsdaten landen nie in Git. Das Secret wird imperativ im Cluster gehalten (siehe App-Repo, `argocd-bootstrap.yml`-Workflow).
+- **Namespace `user-mgmt-staging`**: Staging-Umgebung — von ArgoCD über den Helm Chart mit `values-staging.yaml` gerendert und angewendet.
+- **Namespace `user-mgmt-prod`**: Prod-Umgebung — derselbe Chart mit `values-prod.yaml`.
+- Staging und Prod laufen **parallel im selben Cluster**, sind aber durch `ResourceQuota` (harte CPU-/Memory-Obergrenzen je Namespace) und `NetworkPolicy` (kein Netzwerkzugriff zwischen den Namespaces) voneinander isoliert — Details in [`helm/user-mgmt-service/README.md`](helm/user-mgmt-service/README.md#staging-vs-prod).
+- **`app-secret`** wird bewusst **nicht** von ArgoCD verwaltet (`secret.create: false` in beiden Application-Manifesten) — echte Zugangsdaten landen nie in Git. Das Secret wird in jedem Namespace separat imperativ im Cluster gehalten (siehe App-Repo, `argocd-bootstrap.yml`-Workflow).
 
 ## Einmaliges Setup (Cluster-Bootstrap)
 
-Im App-Repo automatisiert als `workflow_dispatch`-Workflow `argocd-bootstrap.yml` (installiert Traefik + ArgoCD, legt `app-secret` an, wendet `argocd/application.yaml` an). Manuell entspricht das:
+Im App-Repo automatisiert als `workflow_dispatch`-Workflow `argocd-bootstrap.yml` (installiert Traefik + ArgoCD, legt `app-secret` in beiden Namespaces an, wendet beide Applications an). Manuell entspricht das:
 
 ```bash
-# ArgoCD installieren (eigener Namespace, getrennt von der App)
+# ArgoCD installieren (eigener Namespace, getrennt von den App-Namespaces)
 helm repo add argo https://argoproj.github.io/argo-helm
 helm repo update
 helm upgrade --install argocd argo/argo-cd -n argocd --create-namespace
 
-# Application anwenden — ArgoCD übernimmt ab hier das Deployment von user-mgmt-service
-kubectl apply -f argocd/application.yaml
+# Applications anwenden — ArgoCD übernimmt ab hier das Deployment beider Umgebungen
+kubectl apply -f argocd/application-staging.yaml
+kubectl apply -f argocd/application-prod.yaml
 ```
 
-Voraussetzung: `app-secret` existiert bereits im Namespace `user-mgmt` (siehe App-Repo `k8s/README.md` / `helm/user-mgmt-service/README.md`, Abschnitt "Secrets").
+Voraussetzung: `app-secret` existiert bereits in den Namespaces `user-mgmt-staging` und `user-mgmt-prod` (siehe App-Repo `k8s/README.md` / `helm/user-mgmt-service/README.md`, Abschnitt "Secrets").
 
 ## Dashboard-Zugriff
 
@@ -40,15 +43,17 @@ Dashboard unter `https://localhost:8080` (Self-signed-Zertifikat-Warnung ignorie
   kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
   ```
 
+Im Dashboard erscheinen zwei separate Applications: `user-mgmt-service-staging` und `user-mgmt-service-prod`.
+
 ## GitOps-Workflow testen
 
-1. In `helm/user-mgmt-service/values.yaml` z.B. `backend.replicaCount` ändern.
+1. In `helm/user-mgmt-service/values-staging.yaml` (oder `values.yaml` für beide Umgebungen gleichzeitig) z.B. `backend.replicaCount` ändern.
 2. Committen und nach `main` pushen.
-3. Im Dashboard (oder `kubectl get application user-mgmt-service -n argocd -w`) beobachten: ArgoCD erkennt die Abweichung (`OutOfSync`) und synchronisiert automatisch (`Synced`).
-4. Verifizieren: `kubectl get deploy backend -n user-mgmt` zeigt die neue Replica-Zahl.
+3. Im Dashboard (oder `kubectl get application -n argocd -w`) beobachten: die betroffene Application erkennt die Abweichung (`OutOfSync`) und synchronisiert automatisch (`Synced`).
+4. Verifizieren: `kubectl get deploy backend -n user-mgmt-staging` zeigt die neue Replica-Zahl.
 
-Kein manueller `helm upgrade`/`kubectl apply` mehr nötig — jede Änderung an `values.yaml` oder den Templates in diesem Repo wird automatisch übernommen.
+Kein manueller `helm upgrade`/`kubectl apply` mehr nötig — jede Änderung an `values.yaml`/`values-staging.yaml`/`values-prod.yaml` oder den Templates in diesem Repo wird automatisch übernommen. Der `promote`-Job in `build-and-push.yml` (App-Repo) aktualisiert bei jedem Build automatisch den Image-Tag in `values.yaml` — das betrifft **beide** Umgebungen gleichzeitig, da sie den Tag von dort erben.
 
 ## Chart-Dokumentation
 
-Siehe [`helm/user-mgmt-service/README.md`](helm/user-mgmt-service/README.md) für Details zu Konfiguration, Secrets-Handling und Ingress.
+Siehe [`helm/user-mgmt-service/README.md`](helm/user-mgmt-service/README.md) für Details zu Konfiguration, Secrets-Handling, Ingress sowie Staging/Prod-Isolation (ResourceQuota, NetworkPolicy).

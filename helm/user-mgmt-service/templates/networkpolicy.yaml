@@ -1,0 +1,26 @@
+{{- if .Values.networkPolicy.enabled }}
+# Applied identically in every environment's namespace: since both sides of
+# any cross-namespace connection deny non-local ingress, this blocks traffic
+# in both directions - staging and prod (and any other namespace) can't reach
+# each other's pods, even though they share one cluster. Traffic from the
+# Traefik namespace stays allowed so the shared Ingress controller can still
+# reach the frontend; intra-namespace traffic (frontend->backend->postgres)
+# is unaffected.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-cross-namespace
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "user-mgmt-service.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressNamespace }}
+{{- end }}

@@ -97,8 +97,28 @@ secret:
 ingress:
   enabled: true
   className: traefik
-  # No host: the frontend-ingress rule has no host restriction (matches any
-  # incoming Host header), since the backend is no longer publicly exposed -
-  # the frontend proxies all backend calls server-side. No IP/hostname needs
-  # to be known ahead of time, so this never needs updating after a cluster
-  # recreation.
+  # Empty = hostless rule (matches any incoming Host header) - the default
+  # for a single environment. Set per-environment (values-staging.yaml,
+  # values-prod.yaml) once multiple environments share the same Ingress
+  # controller, so their rules don't collide.
+  host: ""
+
+# Caps total requests/limits for every resource in this environment's
+# namespace, so one environment (e.g. staging) can't starve others sharing
+# the same cluster. Sized generously here for the base/prod defaults;
+# values-staging.yaml overrides with tighter numbers.
+resourceQuota:
+  enabled: true
+  requests:
+    cpu: "2"
+    memory: 2Gi
+  limits:
+    cpu: "4"
+    memory: 4Gi
+
+# Restricts ingress to each namespace's own pods plus the Ingress controller,
+# so environments sharing this cluster (e.g. staging and prod) can't reach
+# each other's pods over the network. See templates/networkpolicy.yaml.
+networkPolicy:
+  enabled: true
+  ingressNamespace: traefik

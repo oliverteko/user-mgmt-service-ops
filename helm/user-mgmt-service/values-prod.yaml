@@ -1,0 +1,8 @@
+# Prod overlay - only overrides what differs from values.yaml. Use with:
+#   helm upgrade --install user-mgmt-service ./helm/user-mgmt-service -f values-prod.yaml
+# (in practice applied by ArgoCD via argocd/application-prod.yaml)
+#
+# values.yaml's defaults are already prod-sized (2 backend replicas, generous
+# resources/quota, hostless ingress) - only the namespace needs overriding.
+
+namespace: user-mgmt-prod

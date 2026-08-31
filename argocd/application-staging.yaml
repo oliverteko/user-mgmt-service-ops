@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: user-mgmt-service-staging
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/oliverteko/user-mgmt-service-ops.git
+    targetRevision: main
+    path: helm/user-mgmt-service
+    helm:
+      valueFiles:
+        - values-staging.yaml
+      parameters:
+        - name: secret.create
+          value: "false"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: user-mgmt-staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
