@@ -54,7 +54,7 @@ backend:
     # httpGet probe would falsely report the pod as unhealthy.
     initialDelaySeconds: 25
     periodSeconds: 10
-    failureThreshold: 6
+    failureThreshold: 15
 
 frontend:
   image:
