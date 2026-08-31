@@ -4,10 +4,8 @@
 
 namespace: user-mgmt
 createNamespace: true
-
 nameOverride: ""
 fullnameOverride: ""
-
 postgres:
   image:
     repository: postgres
@@ -32,11 +30,10 @@ postgres:
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 5
-
 backend:
   image:
     repository: ghcr.io/oliverteko/user-mgmt-service-backend
-    tag: latest
+    tag: b86ede60d5562dba9bf35059d91d7974c1b9b67d
     pullPolicy: IfNotPresent
   replicaCount: 2
   service:
@@ -55,11 +52,10 @@ backend:
     initialDelaySeconds: 25
     periodSeconds: 10
     failureThreshold: 15
-
 frontend:
   image:
     repository: ghcr.io/oliverteko/user-mgmt-service-frontend
-    tag: latest
+    tag: b86ede60d5562dba9bf35059d91d7974c1b9b67d
     pullPolicy: IfNotPresent
   replicaCount: 1
   service:
@@ -80,14 +76,12 @@ frontend:
     # (frontend/app/api/*/route.ts) - the browser never talks to the backend
     # directly, so no public/build-time API URL is needed at all.
     internalApiUrl: "http://backend:8080"
-
 config:
   databaseName: postgres
   springDatasourceUrl: "jdbc:postgresql://postgres:5432/postgres"
   springJpaHibernateDdlAuto: update
   jwtIssuer: Spring
   jwtExpirationMillis: "86400000"
-
 secret:
   # true  = this chart renders a Secret from the values below (defaults are
   #         placeholders only - override via --set or an untracked values file
@@ -100,7 +94,6 @@ secret:
   dbUsername: "REPLACE_ME"
   dbPassword: "REPLACE_ME"
   jwtSecret: "REPLACE_ME"
-
 ingress:
   enabled: true
   className: traefik
