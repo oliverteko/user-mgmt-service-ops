@@ -1,0 +1,29 @@
+{{- if .Values.backend.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "user-mgmt-service.componentLabels" (dict "component" "backend" "context" $) | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.backend.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "user-mgmt-service.componentSelectorLabels" (dict "component" "backend" "context" $) | nindent 6 }}
+{{- end }}
+---
+{{- if .Values.frontend.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: frontend
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "user-mgmt-service.componentLabels" (dict "component" "frontend" "context" $) | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.frontend.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "user-mgmt-service.componentSelectorLabels" (dict "component" "frontend" "context" $) | nindent 6 }}
+{{- end }}

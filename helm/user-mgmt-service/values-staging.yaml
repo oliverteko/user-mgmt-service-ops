@@ -22,6 +22,12 @@ backend:
     limits:
       cpu: 250m
       memory: 384Mi
+  # Single replica in staging: autoscaling and a PDB (minAvailable: 1) would
+  # either be pointless or block all voluntary disruptions outright.
+  autoscaling:
+    enabled: false
+  pdb:
+    enabled: false
 
 frontend:
   replicaCount: 1
@@ -32,6 +38,8 @@ frontend:
     limits:
       cpu: 150m
       memory: 192Mi
+  pdb:
+    enabled: false
 
 ingress:
   # Distinct from prod's hostless rule so both can coexist behind the same

@@ -22,6 +22,8 @@ helm/user-mgmt-service/
     secret.yaml
     resourcequota.yaml
     networkpolicy.yaml
+    hpa.yaml
+    pdb.yaml
     postgres-pvc.yaml
     postgres-deployment.yaml
     postgres-service.yaml
@@ -45,6 +47,7 @@ Alle Werte werden über `values.yaml` gesteuert. Wichtige Abschnitte:
 - `ingress.*` — IngressClass, Enable/Disable, optionaler `host`.
 - `resourceQuota.*` — harte CPU-/Memory-Obergrenzen für den gesamten Namespace (siehe "Staging vs. Prod" unten).
 - `networkPolicy.*` — Netzwerk-Isolation zwischen Namespaces (siehe "Staging vs. Prod" unten).
+- `backend.autoscaling.*`, `backend.pdb.*`, `frontend.pdb.*` — Autoscaling und Pod Disruption Budgets (siehe "Hochverfügbarkeit & Autoscaling" unten).
 
 ### Umgebungen
 
@@ -65,13 +68,11 @@ helm upgrade --install user-mgmt-service ./helm/user-mgmt-service \
 3. **`networkPolicy`** — jeder Namespace bekommt eine `NetworkPolicy`, die eingehenden Traffic auf Pods im selben Namespace sowie auf den Ingress-Controller (`networkPolicy.ingressNamespace`, Default `traefik`) beschränkt. Da beide Umgebungen dieselbe Policy erhalten, blockiert das den Zugriff in beide Richtungen — Staging kann nicht auf Prod-Pods zugreifen und umgekehrt.
 4. **`ingress.host`** — da beide Umgebungen denselben Traefik-Controller teilen, braucht mindestens eine Umgebung einen expliziten Host, damit sich die Ingress-Regeln nicht überschneiden. Staging nutzt `staging.user-mgmt.local`, Prod bleibt hostless (heutiges Verhalten).
 
-Testen der Isolation nach dem Deployment (temporärer Test-Pod, da die App-Container kein `wget`/`curl` enthalten):
+Testen der Isolation nach dem Deployment (temporärer Test-Pod, da die App-Container kein `wget`/`curl` enthalten). Der Pod braucht **explizite `resources`**, sonst lehnt die `ResourceQuota` ihn ab (`must specify limits.cpu for: ...`) — das ist Standard-Kubernetes-Verhalten, sobald eine ResourceQuota `requests`/`limits` im Namespace vorschreibt:
 ```bash
-# Von user-mgmt-staging aus: Zugriff auf Prod muss fehlschlagen (Timeout),
-# Zugriff auf die eigene (Staging-)Umgebung muss funktionieren.
-kubectl run netpol-test --rm -it --restart=Never -n user-mgmt-staging --image=busybox:1.36 -- \
-  sh -c 'wget -qO- --timeout=3 http://frontend.user-mgmt-prod.svc.cluster.local:3000; echo "prod exit: $?"; \
-         wget -qO- --timeout=3 http://frontend.user-mgmt-staging.svc.cluster.local:3000; echo "staging exit: $?"'
+kubectl run netpol-test --rm -i --restart=Never -n user-mgmt-staging --image=busybox:1.36 \
+  --overrides='{"spec":{"containers":[{"name":"netpol-test","image":"busybox:1.36","command":["sh","-c","wget -qO- --timeout=3 http://frontend.user-mgmt-prod.svc.cluster.local:3000; echo prod exit: $?; wget -qO- --timeout=3 http://frontend.user-mgmt-staging.svc.cluster.local:3000 >/dev/null; echo staging exit: $?"],"resources":{"requests":{"cpu":"10m","memory":"16Mi"},"limits":{"cpu":"50m","memory":"32Mi"}}}]}}'
+# Erwartung: "prod exit: 1" (Timeout, blockiert), "staging exit: 0" (funktioniert)
 ```
 
 ### Secrets
@@ -100,6 +101,20 @@ kubectl run netpol-test --rm -it --restart=Never -n user-mgmt-staging --image=bu
 - `ingress.enabled: false` deaktiviert das Ingress-Objekt vollständig (z.B. für lokales `kubectl port-forward`).
 - `ingress.host` leer (Default): Die Ingress-Regel hat keinen `host` gesetzt und matched daher jeden eingehenden Host-Header — praktisch für eine einzelne Umgebung ohne bekannten Hostnamen. Der Backend-Service ist ohnehin nicht öffentlich exponiert, das Frontend proxied alle Backend-Aufrufe serverseitig über eigene Next.js-API-Routes (`INTERNAL_API_URL`).
 - Sobald mehrere Umgebungen denselben Ingress-Controller teilen (siehe "Staging vs. Prod"), braucht mindestens eine davon einen expliziten `ingress.host`, damit sich die Regeln nicht überschneiden.
+
+## Hochverfügbarkeit & Autoscaling
+
+- **`backend.autoscaling`** — ein `HorizontalPodAutoscaler` (`templates/hpa.yaml`) skaliert `backend` zwischen `minReplicas` und `maxReplicas` anhand von CPU-Auslastung (`targetCPUUtilizationPercentage`). Braucht `metrics-server` im Cluster (installiert von `argocd-bootstrap.yml`). Nur in Prod aktiv (`values.yaml`) — in Staging deaktiviert (`values-staging.yaml`), da dort nur eine Replica läuft und Autoscaling keinen Sinn ergäbe. Solange `backend.autoscaling.enabled: true` ist, lässt das Deployment-Template `spec.replicas` bewusst weg, damit Helm dem HPA nicht ständig den Wert zurücksetzt; `argocd/application-prod.yaml` ignoriert dieses Feld zusätzlich explizit (`ignoreDifferences`), damit ArgoCDs `selfHeal` die Skalierung nicht revertiert.
+- **`backend.pdb` / `frontend.pdb`** — je ein `PodDisruptionBudget` garantiert bei Node-Wartung/-Drain eine Mindestanzahl (`minAvailable`) laufender Replicas. Nur sinnvoll bei >1 Replica — in Staging (1 Replica je Komponente) deaktiviert, sonst würde die PDB jede freiwillige Disruption blockieren.
+- **RollingUpdate** — `backend`- und `frontend`-Deployment setzen explizit `strategy.type: RollingUpdate` mit `maxUnavailable: 0, maxSurge: 1`: bei einem Update entsteht immer erst der neue Pod, bevor der alte terminiert wird, nie weniger bereite Replicas als vorher — keine Service-Unterbrechung während Rollouts.
+- **Requests/Limits + Probes** — Voraussetzung für alles oben: jede Komponente (auch Postgres) deklariert `resources.requests`/`limits` (siehe `values.yaml`) sowie `readinessProbe`/`livenessProbe` (siehe jeweiliges `*-deployment.yaml`). Der HPA braucht `requests.cpu` als Berechnungsgrundlage; die `ResourceQuota` erzwingt zusätzlich, dass *jeder* Pod im Namespace Requests/Limits angibt (siehe "Staging vs. Prod").
+- **Load Balancing** — keine zusätzliche Konfiguration nötig: der `frontend`/`backend`-Service verteilt Traffic bereits per Round Robin auf alle Pods, deren `readinessProbe` grün ist (Standard-Kubernetes-Service-Verhalten); Traefik routet über den Service, nicht direkt auf Pods, übernimmt also automatisch dieselbe Ready-Filterung.
+
+Skalierung beobachten:
+```bash
+kubectl get hpa backend -n user-mgmt-prod -w
+kubectl get pdb -n user-mgmt-prod
+```
 
 ## Verifikation
 

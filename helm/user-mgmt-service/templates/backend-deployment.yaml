@@ -6,7 +6,17 @@ metadata:
   labels:
     {{- include "user-mgmt-service.componentLabels" (dict "component" "backend" "context" $) | nindent 4 }}
 spec:
+  {{- if not .Values.backend.autoscaling.enabled }}
   replicas: {{ .Values.backend.replicaCount }}
+  {{- end }}
+  # maxUnavailable: 0 - never fewer ready replicas than before the rollout,
+  # so updates cause no service interruption. maxSurge: 1 brings up one new
+  # pod at a time rather than replacing everything at once.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       {{- include "user-mgmt-service.componentSelectorLabels" (dict "component" "backend" "context" $) | nindent 6 }}

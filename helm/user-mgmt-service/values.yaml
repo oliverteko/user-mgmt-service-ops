@@ -52,12 +52,30 @@ backend:
     initialDelaySeconds: 25
     periodSeconds: 10
     failureThreshold: 15
+  # HPA takes over scaling within [minReplicas, maxReplicas] based on CPU
+  # load; replicaCount above only seeds the initial/fallback replica count
+  # (see the `if not autoscaling.enabled` guard in backend-deployment.yaml).
+  # Requires metrics-server in the cluster (installed by argocd-bootstrap.yml).
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
+  # minAvailable must stay below minReplicas, or a voluntary disruption
+  # (node drain, cluster upgrade) could never proceed. Disabled in
+  # values-staging.yaml, which runs a single replica.
+  pdb:
+    enabled: true
+    minAvailable: 1
 frontend:
   image:
     repository: ghcr.io/oliverteko/user-mgmt-service-frontend
     tag: b86ede60d5562dba9bf35059d91d7974c1b9b67d
     pullPolicy: IfNotPresent
-  replicaCount: 1
+  # Static replica count (no HPA - only the backend autoscales, see above).
+  # >1 so the PDB below is meaningful and Traefik actually load-balances
+  # across replicas.
+  replicaCount: 2
   service:
     port: 3000
   probes:
@@ -70,6 +88,9 @@ frontend:
     limits:
       cpu: 250m
       memory: 256Mi
+  pdb:
+    enabled: true
+    minAvailable: 1
   env:
     # Runtime env var, server-side only. Maps to INTERNAL_API_URL. All backend
     # calls are proxied server-side by the frontend's own API routes
