@@ -47,7 +47,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{/*
-Component-scoped labels/selectors. Pass a dict "component" "backend|frontend|postgres" "context" $
+Component-scoped labels/selectors. Pass a dict "component" "backend|frontend" "context" $
 */}}
 {{- define "user-mgmt-service.componentSelectorLabels" -}}
 {{ include "user-mgmt-service.selectorLabels" .context }}
@@ -68,10 +68,12 @@ Build a "repository:tag" image reference. Pass a dict "image" .Values.<component
 {{- end -}}
 
 {{/*
-NOTE on naming: resource names below (postgres, backend, frontend, app-config, app-secret)
+NOTE on naming: resource names below (backend, frontend, app-config, app-secret)
 are intentionally kept as literal/values-driven strings rather than prefixed via
-"user-mgmt-service.fullname". The app's own runtime config hardcodes DNS names like
-"postgres:5432" and "http://backend:8080" (SPRING_DATASOURCE_URL, INTERNAL_API_URL).
+"user-mgmt-service.fullname". The app's own runtime config hardcodes the DNS name
+"http://backend:8080" (INTERNAL_API_URL) - the database is external now (managed
+PostgreSQL, see ../../terraform/database.tf), reached via SPRING_DATASOURCE_URL's
+host/port/name, not an in-cluster Service name.
 Renaming these per-release would break that wiring for no benefit, since this chart is
 designed for one release per namespace (matching current usage). Labels/selectors still use
 the standard helpers above so the chart behaves conventionally and lints cleanly.

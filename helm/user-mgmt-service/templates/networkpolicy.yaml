@@ -6,7 +6,9 @@
 # Traefik namespace stays allowed so the shared Ingress controller can still
 # reach the frontend; from the monitoring namespace so Prometheus can scrape
 # pods directly (ServiceMonitor scrapes bypass the Service); intra-namespace
-# traffic (frontend->backend->postgres) is unaffected.
+# traffic (frontend->backend) is unaffected. Only Ingress is restricted, so
+# the backend's outbound connection to the managed PostgreSQL database
+# (external to the cluster, see ../../terraform/database.tf) isn't touched.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

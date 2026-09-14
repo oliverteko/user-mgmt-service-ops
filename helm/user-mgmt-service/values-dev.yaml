@@ -2,14 +2,11 @@
 # from values.yaml - use with:
 #   helm upgrade --install user-mgmt-service ./helm/user-mgmt-service -f values-dev.yaml
 
-postgres:
-  resources:
-    requests:
-      cpu: 50m
-      memory: 64Mi
-    limits:
-      cpu: 100m
-      memory: 128Mi
+# Example only, like the rest of this file - a "user_mgmt_dev" database
+# doesn't actually exist in terraform/database.tf (only staging/prod do); add
+# a digitalocean_database_db resource for it before this override is usable.
+database:
+  name: user_mgmt_dev
 
 backend:
   resources:

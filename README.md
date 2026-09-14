@@ -13,6 +13,7 @@ Dieses Repo ist die **einzige Quelle der Wahrheit** für den Cluster-Zustand von
 - **[`loadtest/`](loadtest/README.md)**: k6 Load Test gegen `user-mgmt-staging`, läuft als einmaliger Kubernetes `Job` (nicht ArgoCD-verwaltet) und verifiziert, dass der backend-HPA unter Last hoch- und danach wieder runterskaliert.
 - Staging und Prod laufen **parallel im selben Cluster**, sind aber durch `ResourceQuota` (harte CPU-/Memory-Obergrenzen je Namespace) und `NetworkPolicy` (kein Netzwerkzugriff zwischen den Namespaces) voneinander isoliert — Details in [`helm/user-mgmt-service/README.md`](helm/user-mgmt-service/README.md#staging-vs-prod).
 - **`app-secret`** wird bewusst **nicht** von ArgoCD verwaltet (`secret.create: false` in beiden Application-Manifesten) — echte Zugangsdaten landen nie in Git. Das Secret wird in jedem Namespace separat imperativ im Cluster gehalten (siehe App-Repo, `argocd-bootstrap.yml`-Workflow).
+- **PostgreSQL** läuft nicht mehr als Pod in diesem Chart, sondern als DigitalOcean Managed Database — per Terraform provisioniert (`terraform/database.tf`), nicht per Helm. Details in [`helm/user-mgmt-service/README.md`](helm/user-mgmt-service/README.md#managed-database).
 
 ## Einmaliges Setup (Cluster-Bootstrap)
 
@@ -63,4 +64,9 @@ Siehe [`helm/user-mgmt-service/README.md`](helm/user-mgmt-service/README.md) fü
 
 ## Infrastructure as Code
 
-[`terraform/`](terraform/README.md) überführt den bestehenden DigitalOcean Kubernetes Cluster selbst (die Ebene *unterhalb* von ArgoCD/Helm — der Cluster, den `argocd-bootstrap.yml` bisher nur imperativ per `doctl` erwartet) in eine deklarative Terraform-Verwaltung, per Config-Driven Import statt Neuerstellung. Siehe die README dort für den aktuellen Stand und die verbleibenden Schritte.
+[`terraform/`](terraform/README.md) verwaltet zwei DigitalOcean-Ressourcen deklarativ:
+
+- Den bestehenden Kubernetes Cluster selbst (die Ebene *unterhalb* von ArgoCD/Helm — der Cluster, den `argocd-bootstrap.yml` bisher nur imperativ per `doctl` erwartet), per Config-Driven Import statt Neuerstellung.
+- Die Managed PostgreSQL Database (neu, per Terraform **erstellt**, nicht importiert) — ersetzt den vormaligen Postgres-Pod in `helm/user-mgmt-service`.
+
+Siehe die README dort für den aktuellen Stand und die verbleibenden Schritte.

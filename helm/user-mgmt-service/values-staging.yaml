@@ -4,14 +4,10 @@
 
 namespace: user-mgmt-staging
 
-postgres:
-  resources:
-    requests:
-      cpu: 50m
-      memory: 64Mi
-    limits:
-      cpu: 100m
-      memory: 128Mi
+# Same managed cluster as prod (see ../../terraform/database.tf), different
+# logical database.
+database:
+  name: user_mgmt_staging
 
 backend:
   replicaCount: 1

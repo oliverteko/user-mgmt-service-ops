@@ -84,3 +84,43 @@ variable "node_max" {
   type        = number
   default     = 5
 }
+
+# --- Managed PostgreSQL (database.tf) ---------------------------------------
+# Created by Terraform from scratch (not imported). Lives in the same region
+# and VPC as the cluster above so the app reaches it over private networking.
+
+variable "database_cluster_name" {
+  description = "Name of the managed PostgreSQL cluster."
+  type        = string
+  default     = "user-mgmt-postgres"
+}
+
+variable "database_version" {
+  description = "PostgreSQL major version - matches the previously self-hosted postgres:16-alpine."
+  type        = string
+  default     = "16"
+}
+
+variable "database_size" {
+  description = "DigitalOcean managed database size slug. db-s-1vcpu-1gb is the smallest/cheapest tier - fine for a course project, bump for real load."
+  type        = string
+  default     = "db-s-1vcpu-1gb"
+}
+
+variable "staging_database_name" {
+  description = "Logical database name for the staging environment, within the shared managed cluster."
+  type        = string
+  default     = "user_mgmt_staging"
+}
+
+variable "prod_database_name" {
+  description = "Logical database name for the prod environment, within the shared managed cluster."
+  type        = string
+  default     = "user_mgmt_prod"
+}
+
+variable "database_user_name" {
+  description = "Shared DB user for the app, used by both staging and prod. DigitalOcean managed PostgreSQL users aren't scoped to a single database, so staging/prod isolation here comes from separate database names, not separate users - a second managed cluster would be the only way to get real per-environment credential isolation, not worth the extra cost for a course project."
+  type        = string
+  default     = "user_mgmt_service"
+}

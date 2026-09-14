@@ -5,3 +5,4 @@
 # instead, so it never touches a file at all, gitignored or not.
 
 cluster_id = "00000000-0000-0000-0000-000000000000" # doctl kubernetes cluster list -o json
+region     = "fra1"                                  # must match the cluster's actual region

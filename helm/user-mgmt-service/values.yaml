@@ -6,30 +6,17 @@ namespace: user-mgmt
 createNamespace: true
 nameOverride: ""
 fullnameOverride: ""
-postgres:
-  image:
-    repository: postgres
-    tag: "16-alpine"
-    pullPolicy: IfNotPresent
-  service:
-    port: 5432
-  persistence:
-    size: 1Gi
-    accessMode: ReadWriteOnce
-    # Empty = use the cluster's default StorageClass.
-    storageClassName: ""
-  resources:
-    requests:
-      cpu: 100m
-      memory: 128Mi
-    limits:
-      cpu: 250m
-      memory: 256Mi
-  probes:
-    initialDelaySeconds: 10
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 5
+# DigitalOcean Managed PostgreSQL (../../terraform/database.tf) - no postgres
+# Deployment/Service/PVC in this chart anymore. host/port/sslMode come from
+# `terraform output` and are shared across environments (one managed
+# cluster, see database.tf for why); only `name` differs per environment -
+# this default matches the prod database, values-staging.yaml overrides it,
+# same pattern as ingress.host below.
+database:
+  host: "REPLACE_ME.db.ondigitalocean.com" # terraform output database_host
+  port: 25060 # terraform output database_port
+  name: user_mgmt_prod
+  sslMode: require
 backend:
   image:
     repository: ghcr.io/oliverteko/user-mgmt-service-backend
@@ -125,8 +112,6 @@ frontend:
     # directly, so no public/build-time API URL is needed at all.
     internalApiUrl: "http://backend:8080"
 config:
-  databaseName: postgres
-  springDatasourceUrl: "jdbc:postgresql://postgres:5432/postgres"
   springJpaHibernateDdlAuto: update
   jwtIssuer: Spring
   jwtExpirationMillis: "86400000"

@@ -6,8 +6,9 @@ metadata:
   labels:
     {{- include "user-mgmt-service.labels" . | nindent 4 }}
 data:
-  DATABASE_NAME: {{ .Values.config.databaseName | quote }}
-  SPRING_DATASOURCE_URL: {{ .Values.config.springDatasourceUrl | quote }}
+  # DigitalOcean Managed PostgreSQL (see ../../terraform/database.tf) - no
+  # in-cluster postgres Service to point at anymore.
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://{{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }}?sslmode={{ .Values.database.sslMode }}"
   SPRING_JPA_HIBERNATE_DDL_AUTO: {{ .Values.config.springJpaHibernateDdlAuto | quote }}
   JWT_ISSUER: {{ .Values.config.jwtIssuer | quote }}
   JWT_EXPIRATION_MILLIS: {{ .Values.config.jwtExpirationMillis | quote }}
