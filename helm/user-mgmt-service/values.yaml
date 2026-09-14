@@ -46,12 +46,18 @@ backend:
       cpu: 500m
       memory: 512Mi
   probes:
-    # tcpSocket, not httpGet: no public unauthenticated GET endpoint exists
-    # (only POST /users/login and /users/register are permitAll), so an
-    # httpGet probe would falsely report the pod as unhealthy.
-    initialDelaySeconds: 25
+    # httpGet against actuator's health groups (management.endpoint.health.probes.enabled=true,
+    # app repo application.properties; /actuator/health/** permitAll'd in
+    # WebSecurityConfig) - readiness reflects real DB connectivity, not just
+    # an open TCP port. A startupProbe (backend-deployment.yaml) gates
+    # liveness/readiness until the app is actually up, so these budgets only
+    # need to cover steady-state hiccups, not a cold JVM start.
     periodSeconds: 10
-    failureThreshold: 15
+    failureThreshold: 6
+    # Cold start observed 80-180s+ under node CPU contention (JVM +
+    # Hibernate + actuator init) - 30*10s gives 5 minutes of headroom before
+    # the startupProbe itself gives up.
+    startupFailureThreshold: 30
   # HPA takes over scaling within [minReplicas, maxReplicas] based on CPU
   # load; replicaCount above only seeds the initial/fallback replica count
   # (see the `if not autoscaling.enabled` guard in backend-deployment.yaml).
