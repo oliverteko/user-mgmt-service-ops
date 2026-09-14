@@ -55,6 +55,14 @@ alertmanager:
         webhook_configs:
           - url_file: /etc/alertmanager/secrets/alertmanager-webhook/url
             send_resolved: true
+      # The chart always appends a "Watchdog -> null" route to whatever
+      # route we provide (silences Prometheus's synthetic always-firing
+      # liveness alert) - without a receiver actually named "null" to match
+      # it, Alertmanager's own config validation rejects the whole config:
+      # "undefined receiver \"null\" used in route". Found live, only
+      # reproduces once the Alertmanager Operator actually loads the
+      # rendered secret - `helm template` alone won't catch it.
+      - name: "null"
 
 grafana:
   # Ships the chart's curated dashboards (Kubernetes / Compute Resources /
