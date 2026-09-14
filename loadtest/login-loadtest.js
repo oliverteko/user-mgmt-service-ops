@@ -13,19 +13,31 @@ const loginErrors = new Rate('login_errors');
 
 // QUICK_TEST=true trims this to ~1.5 minutes for fast iteration/dry runs.
 // Without it, this is the ~16 minute profile meant to show a full HPA
-// scale-up (during the 50-VU plateau) and scale-down (during the trailing
-// 0-VU hold, long enough to clear the default 5 min scale-down stabilization
+// scale-up (during the plateau) and scale-down (during the trailing 0-VU
+// hold, long enough to clear the default 5 min scale-down stabilization
 // window).
+//
+// Peak VUs deliberately proportional to what staging can actually run:
+// backend.autoscaling maxes out at 3 replicas * 250m CPU limit = 750m total
+// (values-staging.yaml) - a first version of this test targeted 50 VUs
+// ramping over 2m and, tried live, drove sustained ~250% CPU (i.e. pinned at
+// the limit) well before the 2nd/3rd replica could come up and share the
+// load, so the Service had zero ready endpoints for minutes at a time
+// (99.95% request failure, confirmed via a live k6 run). 15 VUs over a
+// gentler 3m ramp still reliably crosses the 70% HPA threshold (bcrypt makes
+// even a handful of concurrent logins CPU-heavy) while giving new replicas
+// realistic time to come up and take a share before the existing ones are
+// overwhelmed.
 const stages = __ENV.QUICK_TEST
   ? [
       { duration: '15s', target: 10 },
-      { duration: '30s', target: 30 },
+      { duration: '30s', target: 15 },
       { duration: '30s', target: 0 },
     ]
   : [
-      { duration: '1m', target: 10 },
-      { duration: '2m', target: 50 },
-      { duration: '5m', target: 50 },
+      { duration: '1m', target: 5 },
+      { duration: '3m', target: 15 },
+      { duration: '5m', target: 15 },
       { duration: '2m', target: 0 },
       { duration: '6m', target: 0 },
     ];
