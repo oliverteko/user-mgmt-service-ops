@@ -54,6 +54,13 @@ backend:
     # need to cover steady-state hiccups, not a cold JVM start.
     periodSeconds: 10
     failureThreshold: 6
+    # Kubernetes' default probe timeout is 1s - found live under a k6 load
+    # test that a CPU-throttled pod (all replicas pegged at their CPU limit)
+    # can take longer than that just to answer a health check, so the
+    # default was killing perfectly-alive-but-slow pods and forcing them
+    # into a cold-restart loop, right when they were needed most. This gives
+    # a slow-but-responsive pod room to answer before being marked failed.
+    timeoutSeconds: 5
     # Cold start observed 80-180s+ under node CPU contention (JVM +
     # Hibernate + actuator init) - 30*10s gives 5 minutes of headroom before
     # the startupProbe itself gives up.
