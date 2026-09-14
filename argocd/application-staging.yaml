@@ -18,6 +18,16 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: user-mgmt-staging
+  # The backend HPA (enabled in staging for the k6 load test) owns
+  # spec.replicas once deployed; without this, ArgoCD's selfHeal would
+  # revert every scaling decision back to the chart's static replicaCount
+  # within ~3 minutes. Mirrors application-prod.yaml.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: backend
+      jsonPointers:
+        - /spec/replicas
   syncPolicy:
     automated:
       prune: true

@@ -1,8 +1,8 @@
 {{- if .Values.backend.autoscaling.enabled }}
-# Requires metrics-server in the cluster to read CPU usage. ArgoCD's
-# Application ignores drift on the Deployment's spec.replicas field (see
-# argocd/application-prod.yaml) so it doesn't fight this controller over the
-# replica count.
+# Requires metrics-server in the cluster to read CPU usage. Both ArgoCD
+# Applications ignore drift on the Deployment's spec.replicas field (see
+# argocd/application-staging.yaml, argocd/application-prod.yaml) so they
+# don't fight this controller over the replica count.
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:

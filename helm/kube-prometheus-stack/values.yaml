@@ -16,6 +16,10 @@ prometheus:
     serviceMonitorNamespaceSelector: {}
     ruleSelectorNilUsesHelmValues: false
     ruleNamespaceSelector: {}
+    # Lets k6 (../../loadtest/) push its own load-generator metrics
+    # (k6_vus, k6_http_req_duration_seconds, ...) straight into this
+    # Prometheus via remote_write, so load and effect show up side by side.
+    enableRemoteWriteReceiver: true
     retention: 15d
     resources:
       requests:
@@ -80,6 +84,104 @@ grafana:
             path: /var/lib/grafana/dashboards/user-mgmt-service
   dashboards:
     user-mgmt-service:
+      load-test-hpa:
+        json: |
+          {
+            "title": "user-mgmt-service / Load Test & HPA",
+            "uid": "user-mgmt-service-load-test-hpa",
+            "schemaVersion": 39,
+            "version": 1,
+            "timezone": "browser",
+            "refresh": "10s",
+            "time": { "from": "now-30m", "to": "now" },
+            "panels": [
+              {
+                "id": 1,
+                "title": "Active VUs (k6)",
+                "type": "timeseries",
+                "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+                "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+                "targets": [
+                  { "expr": "sum(k6_vus)", "legendFormat": "VUs", "refId": "A" }
+                ]
+              },
+              {
+                "id": 2,
+                "title": "HPA Desired vs. Current Replicas (backend)",
+                "type": "timeseries",
+                "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+                "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+                "targets": [
+                  {
+                    "expr": "kube_horizontalpodautoscaler_status_desired_replicas{horizontalpodautoscaler=\"backend\"}",
+                    "legendFormat": "desired ({{namespace}})",
+                    "refId": "A"
+                  },
+                  {
+                    "expr": "kube_horizontalpodautoscaler_status_current_replicas{horizontalpodautoscaler=\"backend\"}",
+                    "legendFormat": "current ({{namespace}})",
+                    "refId": "B"
+                  }
+                ]
+              },
+              {
+                "id": 3,
+                "title": "Backend Pod Replicas (actual)",
+                "type": "timeseries",
+                "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+                "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+                "targets": [
+                  {
+                    "expr": "kube_deployment_status_replicas{deployment=\"backend\", namespace=~\"user-mgmt-.*\"}",
+                    "legendFormat": "{{namespace}}",
+                    "refId": "A"
+                  }
+                ]
+              },
+              {
+                "id": 4,
+                "title": "Request Rate",
+                "type": "timeseries",
+                "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+                "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+                "targets": [
+                  {
+                    "expr": "sum(rate(http_server_requests_seconds_count{job=\"backend\"}[1m])) by (namespace)",
+                    "legendFormat": "{{namespace}}",
+                    "refId": "A"
+                  }
+                ]
+              },
+              {
+                "id": 5,
+                "title": "Avg Response Time",
+                "type": "timeseries",
+                "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+                "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+                "targets": [
+                  {
+                    "expr": "sum(rate(http_server_requests_seconds_sum{job=\"backend\"}[1m])) by (namespace) / sum(rate(http_server_requests_seconds_count{job=\"backend\"}[1m])) by (namespace)",
+                    "legendFormat": "{{namespace}}",
+                    "refId": "A"
+                  }
+                ]
+              },
+              {
+                "id": 6,
+                "title": "Error Rate (5xx)",
+                "type": "timeseries",
+                "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+                "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
+                "targets": [
+                  {
+                    "expr": "sum(rate(http_server_requests_seconds_count{job=\"backend\", status=~\"5..\"}[1m])) by (namespace) / sum(rate(http_server_requests_seconds_count{job=\"backend\"}[1m])) by (namespace)",
+                    "legendFormat": "{{namespace}}",
+                    "refId": "A"
+                  }
+                ]
+              }
+            ]
+          }
       backend-http:
         json: |
           {

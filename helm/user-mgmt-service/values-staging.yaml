@@ -22,10 +22,16 @@ backend:
     limits:
       cpu: 250m
       memory: 384Mi
-  # Single replica in staging: autoscaling and a PDB (minAvailable: 1) would
-  # either be pointless or block all voluntary disruptions outright.
+  # Autoscaling enabled (unlike the earlier single-fixed-replica setup) so the
+  # k6 load test (../../loadtest/) has something to actually exercise -
+  # staging is where that controlled load runs, not prod. Ceiling kept lower
+  # than prod's (3 vs 4) since staging's resourceQuota is tighter. PDB stays
+  # off: minAvailable would need to stay below minReplicas (1), so it'd
+  # either be pointless or block every voluntary disruption outright.
   autoscaling:
-    enabled: false
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
   pdb:
     enabled: false
 
