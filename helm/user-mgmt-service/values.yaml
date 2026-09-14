@@ -137,6 +137,19 @@ resourceQuota:
     cpu: "4"
     memory: 4Gi
 
+# Scraped by the kube-prometheus-stack Prometheus instance (installed
+# separately, see ../kube-prometheus-stack/values.yaml) via the ServiceMonitor
+# below. Requires management.endpoints.web.exposure.include=health,prometheus
+# on the backend (see the app repo's application.properties).
+monitoring:
+  enabled: true
+  namespace: monitoring
+  scrapeInterval: 15s
+  errorRate:
+    threshold: 0.05
+    window: 5m
+    for: 5m
+
 # Restricts ingress to each namespace's own pods plus the Ingress controller,
 # so environments sharing this cluster (e.g. staging and prod) can't reach
 # each other's pods over the network. See templates/networkpolicy.yaml.

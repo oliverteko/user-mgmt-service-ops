@@ -1,0 +1,30 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: backend
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "user-mgmt-service.componentLabels" (dict "component" "backend" "context" $) | nindent 4 }}
+spec:
+  groups:
+    - name: user-mgmt-service.backend
+      rules:
+        # Fires when 5xx responses make up more than the configured share of
+        # backend traffic over the window below - e.g. the DB connection pool
+        # is exhausted or JWT validation is failing for all requests.
+        - alert: BackendHighErrorRate
+          expr: |
+            (
+              sum(rate(http_server_requests_seconds_count{namespace="{{ .Values.namespace }}", job="backend", status=~"5.."}[{{ .Values.monitoring.errorRate.window }}]))
+              /
+              sum(rate(http_server_requests_seconds_count{namespace="{{ .Values.namespace }}", job="backend"}[{{ .Values.monitoring.errorRate.window }}]))
+            ) > {{ .Values.monitoring.errorRate.threshold }}
+          for: {{ .Values.monitoring.errorRate.for }}
+          labels:
+            severity: warning
+            namespace: {{ .Values.namespace }}
+          annotations:
+            summary: "user-mgmt-service backend ({{ .Values.namespace }}) has a high 5xx error rate"
+            description: "More than {{ mulf .Values.monitoring.errorRate.threshold 100.0 }}% of backend requests in {{ .Values.namespace }} have returned 5xx over the last {{ .Values.monitoring.errorRate.window }}."
+{{- end }}

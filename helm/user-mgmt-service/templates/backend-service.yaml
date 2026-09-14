@@ -10,5 +10,6 @@ spec:
   selector:
     {{- include "user-mgmt-service.componentSelectorLabels" (dict "component" "backend" "context" $) | nindent 4 }}
   ports:
-    - port: {{ .Values.backend.service.port }}
+    - name: http
+      port: {{ .Values.backend.service.port }}
       targetPort: {{ .Values.backend.service.port }}

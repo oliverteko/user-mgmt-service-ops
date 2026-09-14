@@ -32,6 +32,8 @@ helm/user-mgmt-service/
     frontend-deployment.yaml
     frontend-service.yaml
     ingress-frontend.yaml
+    servicemonitor.yaml
+    prometheusrule.yaml
     NOTES.txt
 ```
 
@@ -48,6 +50,7 @@ Alle Werte werden über `values.yaml` gesteuert. Wichtige Abschnitte:
 - `resourceQuota.*` — harte CPU-/Memory-Obergrenzen für den gesamten Namespace (siehe "Staging vs. Prod" unten).
 - `networkPolicy.*` — Netzwerk-Isolation zwischen Namespaces (siehe "Staging vs. Prod" unten).
 - `backend.autoscaling.*`, `backend.pdb.*`, `frontend.pdb.*` — Autoscaling und Pod Disruption Budgets (siehe "Hochverfügbarkeit & Autoscaling" unten).
+- `monitoring.*` — ServiceMonitor/PrometheusRule für den Backend (siehe "Monitoring" unten).
 
 ### Umgebungen
 
@@ -101,6 +104,16 @@ kubectl run netpol-test --rm -i --restart=Never -n user-mgmt-staging --image=bus
 - `ingress.enabled: false` deaktiviert das Ingress-Objekt vollständig (z.B. für lokales `kubectl port-forward`).
 - `ingress.host` leer (Default): Die Ingress-Regel hat keinen `host` gesetzt und matched daher jeden eingehenden Host-Header — praktisch für eine einzelne Umgebung ohne bekannten Hostnamen. Der Backend-Service ist ohnehin nicht öffentlich exponiert, das Frontend proxied alle Backend-Aufrufe serverseitig über eigene Next.js-API-Routes (`INTERNAL_API_URL`).
 - Sobald mehrere Umgebungen denselben Ingress-Controller teilen (siehe "Staging vs. Prod"), braucht mindestens eine davon einen expliziten `ingress.host`, damit sich die Regeln nicht überschneiden.
+
+## Monitoring
+
+`monitoring.enabled` (Default `true`) rendert für den Backend:
+
+- **`templates/servicemonitor.yaml`** — lässt Prometheus (kube-prometheus-stack, separat installiert über [`helm/kube-prometheus-stack`](../kube-prometheus-stack) + [`argocd/application-monitoring.yaml`](../../argocd/application-monitoring.yaml)) `/actuator/prometheus` auf dem `backend`-Service (Port `http`) scrapen. Voraussetzung im App-Repo: `spring-boot-starter-actuator` + `micrometer-registry-prometheus` auf dem Classpath, `management.endpoints.web.exposure.include=health,prometheus`, sowie `permitAll()` für `/actuator/health/**` und `/actuator/prometheus` in `WebSecurityConfig`.
+- **`templates/prometheusrule.yaml`** — Alert `BackendHighErrorRate`: feuert, wenn der Anteil an 5xx-Antworten über `monitoring.errorRate.threshold` (Default 5%) liegt, gemessen über `monitoring.errorRate.window` (Default 5m), für mindestens `monitoring.errorRate.for` (Default 5m) am Stück.
+- **`networkpolicy.yaml`** lässt zusätzlich Ingress-Traffic aus dem `monitoring`-Namespace zu (`monitoring.namespace`) — ohne diese Ausnahme würde `deny-cross-namespace` die Scrapes blockieren, da ServiceMonitor-Scrapes die Pods direkt (nicht über den Service) ansprechen.
+
+kube-prometheus-stack selbst (Prometheus, Grafana, Alertmanager) läuft als eigene ArgoCD Application im dedizierten Namespace `monitoring`, konfiguriert über eine eigene `values.yaml` — siehe [`helm/kube-prometheus-stack/`](../kube-prometheus-stack).
 
 ## Hochverfügbarkeit & Autoscaling
 

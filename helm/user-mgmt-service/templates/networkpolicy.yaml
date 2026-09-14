@@ -4,8 +4,9 @@
 # in both directions - staging and prod (and any other namespace) can't reach
 # each other's pods, even though they share one cluster. Traffic from the
 # Traefik namespace stays allowed so the shared Ingress controller can still
-# reach the frontend; intra-namespace traffic (frontend->backend->postgres)
-# is unaffected.
+# reach the frontend; from the monitoring namespace so Prometheus can scrape
+# pods directly (ServiceMonitor scrapes bypass the Service); intra-namespace
+# traffic (frontend->backend->postgres) is unaffected.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -23,4 +24,9 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressNamespace }}
+        {{- if .Values.monitoring.enabled }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.monitoring.namespace }}
+        {{- end }}
 {{- end }}

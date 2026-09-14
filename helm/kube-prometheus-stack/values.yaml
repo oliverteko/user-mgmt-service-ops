@@ -1,0 +1,137 @@
+# Declarative config for the prometheus-community/kube-prometheus-stack
+# chart, installed cluster-wide into the `monitoring` namespace via
+# argocd/application-monitoring.yaml (multi-source Application: this file is
+# passed as the Helm values source, the chart itself comes from the upstream
+# Helm repo). Node-exporter, kube-state-metrics and the default Grafana
+# dashboards (incl. per-pod CPU/Memory) stay on their chart defaults - only
+# what needs to differ from those defaults is set here.
+
+prometheus:
+  prometheusSpec:
+    # Without this, Prometheus only watches ServiceMonitors/PrometheusRules
+    # carrying this release's Helm label - our backend's ServiceMonitor
+    # (helm/user-mgmt-service chart, a separate Helm release per environment)
+    # would never be picked up otherwise.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorNamespaceSelector: {}
+    ruleSelectorNilUsesHelmValues: false
+    ruleNamespaceSelector: {}
+    retention: 15d
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+alertmanager:
+  alertmanagerSpec:
+    # Pre-created imperatively (argocd-bootstrap.yml, ALERTMANAGER_WEBHOOK_URL
+    # secret) - same pattern as the app's own app-secret, so the webhook URL
+    # never enters git. Mounted at /etc/alertmanager/secrets/alertmanager-webhook/.
+    secrets:
+      - alertmanager-webhook
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+  config:
+    route:
+      receiver: generic-webhook
+      group_by: ["alertname", "namespace"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+    receivers:
+      - name: generic-webhook
+        webhook_configs:
+          - url_file: /etc/alertmanager/secrets/alertmanager-webhook/url
+            send_resolved: true
+
+grafana:
+  # Ships the chart's curated dashboards (Kubernetes / Compute Resources /
+  # Pod, Node, etc.) - covers the required per-pod CPU/Memory visualization
+  # with no extra provisioning needed.
+  defaultDashboardsEnabled: true
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - grafana.user-mgmt.local
+    path: /
+  # Custom dashboard for the user-mgmt-service backend: request rate,
+  # response time and error rate, all derived from the actuator/prometheus
+  # metrics scraped via the backend ServiceMonitor.
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: user-mgmt-service
+          orgId: 1
+          folder: user-mgmt-service
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/user-mgmt-service
+  dashboards:
+    user-mgmt-service:
+      backend-http:
+        json: |
+          {
+            "title": "user-mgmt-service / Backend HTTP",
+            "uid": "user-mgmt-service-backend-http",
+            "schemaVersion": 39,
+            "version": 1,
+            "timezone": "browser",
+            "refresh": "30s",
+            "time": { "from": "now-6h", "to": "now" },
+            "panels": [
+              {
+                "id": 1,
+                "title": "Request Rate",
+                "type": "timeseries",
+                "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+                "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+                "targets": [
+                  {
+                    "expr": "sum(rate(http_server_requests_seconds_count{job=\"backend\"}[5m])) by (namespace)",
+                    "legendFormat": "{{namespace}}",
+                    "refId": "A"
+                  }
+                ]
+              },
+              {
+                "id": 2,
+                "title": "Avg Response Time",
+                "type": "timeseries",
+                "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+                "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+                "targets": [
+                  {
+                    "expr": "sum(rate(http_server_requests_seconds_sum{job=\"backend\"}[5m])) by (namespace) / sum(rate(http_server_requests_seconds_count{job=\"backend\"}[5m])) by (namespace)",
+                    "legendFormat": "{{namespace}}",
+                    "refId": "A"
+                  }
+                ]
+              },
+              {
+                "id": 3,
+                "title": "Error Rate (5xx)",
+                "type": "timeseries",
+                "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+                "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
+                "targets": [
+                  {
+                    "expr": "sum(rate(http_server_requests_seconds_count{job=\"backend\", status=~\"5..\"}[5m])) by (namespace) / sum(rate(http_server_requests_seconds_count{job=\"backend\"}[5m])) by (namespace)",
+                    "legendFormat": "{{namespace}}",
+                    "refId": "A"
+                  }
+                ]
+              }
+            ]
+          }

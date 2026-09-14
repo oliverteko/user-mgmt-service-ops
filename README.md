@@ -9,6 +9,7 @@ Dieses Repo ist die **einzige Quelle der Wahrheit** für den Cluster-Zustand von
 - **Namespace `argocd`**: ArgoCD selbst (Controller, Server, Repo-Server, Dashboard).
 - **Namespace `user-mgmt-staging`**: Staging-Umgebung — von ArgoCD über den Helm Chart mit `values-staging.yaml` gerendert und angewendet.
 - **Namespace `user-mgmt-prod`**: Prod-Umgebung — derselbe Chart mit `values-prod.yaml`.
+- **Namespace `monitoring`**: kube-prometheus-stack (Prometheus, Grafana, Alertmanager) — verwaltet über eine eigene ArgoCD Application ([`argocd/application-monitoring.yaml`](argocd/application-monitoring.yaml)), konfiguriert über [`helm/kube-prometheus-stack/values.yaml`](helm/kube-prometheus-stack/README.md). Überwacht Pods in allen Namespaces (u.a. CPU/Memory) sowie speziell den `backend` in `user-mgmt-staging`/`user-mgmt-prod` über dessen `ServiceMonitor`/`PrometheusRule` (siehe [Monitoring-Sektion der Chart-README](helm/user-mgmt-service/README.md#monitoring)).
 - Staging und Prod laufen **parallel im selben Cluster**, sind aber durch `ResourceQuota` (harte CPU-/Memory-Obergrenzen je Namespace) und `NetworkPolicy` (kein Netzwerkzugriff zwischen den Namespaces) voneinander isoliert — Details in [`helm/user-mgmt-service/README.md`](helm/user-mgmt-service/README.md#staging-vs-prod).
 - **`app-secret`** wird bewusst **nicht** von ArgoCD verwaltet (`secret.create: false` in beiden Application-Manifesten) — echte Zugangsdaten landen nie in Git. Das Secret wird in jedem Namespace separat imperativ im Cluster gehalten (siehe App-Repo, `argocd-bootstrap.yml`-Workflow).
 
@@ -25,9 +26,10 @@ helm upgrade --install argocd argo/argo-cd -n argocd --create-namespace
 # Applications anwenden — ArgoCD übernimmt ab hier das Deployment beider Umgebungen
 kubectl apply -f argocd/application-staging.yaml
 kubectl apply -f argocd/application-prod.yaml
+kubectl apply -f argocd/application-monitoring.yaml
 ```
 
-Voraussetzung: `app-secret` existiert bereits in den Namespaces `user-mgmt-staging` und `user-mgmt-prod` (siehe App-Repo `k8s/README.md` / `helm/user-mgmt-service/README.md`, Abschnitt "Secrets").
+Voraussetzung: `app-secret` existiert bereits in den Namespaces `user-mgmt-staging` und `user-mgmt-prod`, sowie `alertmanager-webhook` im Namespace `monitoring` (siehe App-Repo `k8s/README.md` / `helm/user-mgmt-service/README.md`, Abschnitt "Secrets", bzw. [`helm/kube-prometheus-stack/README.md`](helm/kube-prometheus-stack/README.md)).
 
 ## Dashboard-Zugriff
 
