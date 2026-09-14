@@ -60,3 +60,7 @@ Kein manueller `helm upgrade`/`kubectl apply` mehr nötig — jede Änderung an 
 ## Chart-Dokumentation
 
 Siehe [`helm/user-mgmt-service/README.md`](helm/user-mgmt-service/README.md) für Details zu Konfiguration, Secrets-Handling, Ingress sowie Staging/Prod-Isolation (ResourceQuota, NetworkPolicy).
+
+## Infrastructure as Code
+
+[`terraform/`](terraform/README.md) überführt den bestehenden DigitalOcean Kubernetes Cluster selbst (die Ebene *unterhalb* von ArgoCD/Helm — der Cluster, den `argocd-bootstrap.yml` bisher nur imperativ per `doctl` erwartet) in eine deklarative Terraform-Verwaltung, per Config-Driven Import statt Neuerstellung. Siehe die README dort für den aktuellen Stand und die verbleibenden Schritte.

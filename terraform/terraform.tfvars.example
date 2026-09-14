@@ -1,0 +1,7 @@
+# Copy to a gitignored *.auto.tfvars (e.g. local.auto.tfvars) and fill in.
+# Never commit a file containing the real do_token.
+
+# do_token intentionally omitted here - supply it via TF_VAR_do_token
+# instead, so it never touches a file at all, gitignored or not.
+
+cluster_id = "00000000-0000-0000-0000-000000000000" # doctl kubernetes cluster list -o json
