@@ -33,7 +33,7 @@ postgres:
 backend:
   image:
     repository: ghcr.io/oliverteko/user-mgmt-service-backend
-    tag: b86ede60d5562dba9bf35059d91d7974c1b9b67d
+    tag: ccce468ee5ddcdc005f11d3f1d1ecccc92aaa5d0
     pullPolicy: IfNotPresent
   replicaCount: 2
   service:
@@ -70,7 +70,7 @@ backend:
 frontend:
   image:
     repository: ghcr.io/oliverteko/user-mgmt-service-frontend
-    tag: b86ede60d5562dba9bf35059d91d7974c1b9b67d
+    tag: ccce468ee5ddcdc005f11d3f1d1ecccc92aaa5d0
     pullPolicy: IfNotPresent
   # Static replica count (no HPA - only the backend autoscales, see above).
   # >1 so the PDB below is meaningful and Traefik actually load-balances
@@ -123,7 +123,6 @@ ingress:
   # values-prod.yaml) once multiple environments share the same Ingress
   # controller, so their rules don't collide.
   host: ""
-
 # Caps total requests/limits for every resource in this environment's
 # namespace, so one environment (e.g. staging) can't starve others sharing
 # the same cluster. Sized generously here for the base/prod defaults;
@@ -136,7 +135,6 @@ resourceQuota:
   limits:
     cpu: "4"
     memory: 4Gi
-
 # Scraped by the kube-prometheus-stack Prometheus instance (installed
 # separately, see ../kube-prometheus-stack/values.yaml) via the ServiceMonitor
 # below. Requires management.endpoints.web.exposure.include=health,prometheus
@@ -149,7 +147,6 @@ monitoring:
     threshold: 0.05
     window: 5m
     for: 5m
-
 # Restricts ingress to each namespace's own pods plus the Ingress controller,
 # so environments sharing this cluster (e.g. staging and prod) can't reach
 # each other's pods over the network. See templates/networkpolicy.yaml.
