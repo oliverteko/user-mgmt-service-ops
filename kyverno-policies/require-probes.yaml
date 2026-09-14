@@ -1,0 +1,38 @@
+# Not from the upstream library - written for this project. Scoped to our
+# own namespaces only - see README.md for why.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-probes
+  annotations:
+    policies.kyverno.io/title: Require Readiness and Liveness Probes
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Every container must define both a readinessProbe and a livenessProbe
+      (any probe type - httpGet/tcpSocket/exec all satisfy this, only
+      presence is checked). Without a readinessProbe a Service can route
+      traffic to a pod before it's actually able to handle it; without a
+      livenessProbe Kubernetes can't detect and restart a wedged container.
+      helm/user-mgmt-service's backend (tcpSocket) and frontend (httpGet)
+      both already declare both.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-probes
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - user-mgmt-*
+      validate:
+        message: "Every container must define both a readinessProbe and a livenessProbe."
+        pattern:
+          spec:
+            containers:
+              - readinessProbe: {}
+                livenessProbe: {}

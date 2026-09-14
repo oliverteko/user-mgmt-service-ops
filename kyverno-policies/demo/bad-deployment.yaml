@@ -1,0 +1,27 @@
+# Deliberately violates all four ClusterPolicies at once, to prove
+# enforcement actually blocks admission - not applied by ArgoCD (excluded in
+# argocd/application-kyverno-policies.yaml), apply by hand. See ../README.md
+# for the exact commands and expected output.
+#
+# - no resources.requests/limits      -> require-requests-limits
+# - image tag ":latest"               -> disallow-latest-tag
+# - no securityContext.runAsNonRoot   -> require-run-as-nonroot
+# - no readiness/livenessProbe        -> require-probes
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: policy-violation-demo
+  namespace: user-mgmt-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: policy-violation-demo
+  template:
+    metadata:
+      labels:
+        app: policy-violation-demo
+    spec:
+      containers:
+        - name: demo
+          image: nginx:latest

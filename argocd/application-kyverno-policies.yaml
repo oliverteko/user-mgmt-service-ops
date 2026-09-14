@@ -1,0 +1,34 @@
+# Plain-manifest Application (no Helm) - applies the ClusterPolicy objects
+# from kyverno-policies/. Deliberately separate from application-kyverno.yaml:
+# these are custom resources that need Kyverno's CRDs to exist first. On a
+# first-time bootstrap this Application's very first sync attempt can fail
+# ("no matches for kind ClusterPolicy") if it races ahead of the kyverno
+# Application - automated sync + selfHeal retries on its own once the CRDs
+# land, no manual intervention needed, just a short delay.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kyverno-policies
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/oliverteko/user-mgmt-service-ops.git
+    targetRevision: main
+    path: kyverno-policies
+    directory:
+      # demo/ holds the intentionally-invalid manifest used to prove
+      # enforcement works (kyverno-policies/README.md) - must never be
+      # GitOps-applied itself, only kubectl-applied manually as a one-off test.
+      exclude: "{README.md,demo/**}"
+  destination:
+    server: https://kubernetes.default.svc
+    # ClusterPolicy is cluster-scoped, but ArgoCD Applications still need a
+    # destination namespace for non-namespaced-resource bookkeeping.
+    namespace: policy
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -14,6 +14,7 @@ Dieses Repo ist die **einzige Quelle der Wahrheit** für den Cluster-Zustand von
 - Staging und Prod laufen **parallel im selben Cluster**, sind aber durch `ResourceQuota` (harte CPU-/Memory-Obergrenzen je Namespace) und `NetworkPolicy` (kein Netzwerkzugriff zwischen den Namespaces) voneinander isoliert — Details in [`helm/user-mgmt-service/README.md`](helm/user-mgmt-service/README.md#staging-vs-prod).
 - **`app-secret`** wird bewusst **nicht** von ArgoCD verwaltet (`secret.create: false` in beiden Application-Manifesten) — echte Zugangsdaten landen nie in Git. Das Secret wird in jedem Namespace separat imperativ im Cluster gehalten (siehe App-Repo, `argocd-bootstrap.yml`-Workflow).
 - **PostgreSQL** läuft nicht mehr als Pod in diesem Chart, sondern als DigitalOcean Managed Database — per Terraform provisioniert (`terraform/database.tf`), nicht per Helm. Details in [`helm/user-mgmt-service/README.md`](helm/user-mgmt-service/README.md#managed-database).
+- **Namespace `policy`**: [Kyverno](https://kyverno.io/) (Policy as Code) — erzwingt (`validationFailureAction: Enforce`) mindestens vier ClusterPolicies gegen alle `user-mgmt-*`-Namespaces (Requests/Limits, kein `:latest`-Tag, `runAsNonRoot`, Readiness-/Liveness-Probes). Details in [`kyverno-policies/README.md`](kyverno-policies/README.md), inkl. Nachweis, dass ein absichtlich ungültiges Deployment abgelehnt wird.
 
 ## Einmaliges Setup (Cluster-Bootstrap)
 
@@ -29,6 +30,12 @@ helm upgrade --install argocd argo/argo-cd -n argocd --create-namespace
 kubectl apply -f argocd/application-staging.yaml
 kubectl apply -f argocd/application-prod.yaml
 kubectl apply -f argocd/application-monitoring.yaml
+
+# Kyverno erst, dann die ClusterPolicies (letztere brauchen Kyvernos CRDs -
+# automated sync + selfHeal holt einen kurzen Wettlauf beim ersten Bootstrap
+# von selbst nach, siehe kyverno-policies/README.md)
+kubectl apply -f argocd/application-kyverno.yaml
+kubectl apply -f argocd/application-kyverno-policies.yaml
 ```
 
 Voraussetzung: `app-secret` existiert bereits in den Namespaces `user-mgmt-staging` und `user-mgmt-prod`, sowie `alertmanager-webhook` im Namespace `monitoring` (siehe App-Repo `k8s/README.md` / `helm/user-mgmt-service/README.md`, Abschnitt "Secrets", bzw. [`helm/kube-prometheus-stack/README.md`](helm/kube-prometheus-stack/README.md)).
@@ -47,7 +54,7 @@ Dashboard unter `https://localhost:8080` (Self-signed-Zertifikat-Warnung ignorie
   kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
   ```
 
-Im Dashboard erscheinen zwei separate Applications: `user-mgmt-service-staging` und `user-mgmt-service-prod`.
+Im Dashboard erscheinen die separaten Applications: `user-mgmt-service-staging`, `user-mgmt-service-prod`, `kyverno` und `kyverno-policies`.
 
 ## GitOps-Workflow testen
 
@@ -69,4 +76,8 @@ Siehe [`helm/user-mgmt-service/README.md`](helm/user-mgmt-service/README.md) fü
 - Den bestehenden Kubernetes Cluster selbst (die Ebene *unterhalb* von ArgoCD/Helm — der Cluster, den `argocd-bootstrap.yml` bisher nur imperativ per `doctl` erwartet), per Config-Driven Import statt Neuerstellung.
 - Die Managed PostgreSQL Database (neu, per Terraform **erstellt**, nicht importiert) — ersetzt den vormaligen Postgres-Pod in `helm/user-mgmt-service`.
 
-Siehe die README dort für den aktuellen Stand und die verbleibenden Schritte.
+Siehe die README dort für Details.
+
+## Policy as Code
+
+[`kyverno-policies/`](kyverno-policies/README.md) — vier `ClusterPolicy`-Objekte, deklarativ in diesem Repo, `Enforce` statt nur `Audit`. Installation von Kyverno selbst über [`helm/kyverno/values.yaml`](helm/kyverno/values.yaml). Die README dort dokumentiert auch den tatsächlich durchgeführten Nachweis (Kyverno CLI, offline, ohne Cluster), dass ein absichtlich ungültiges Deployment von allen vier Policies abgelehnt wird, während die echten `backend`/`frontend`-Deployments dieses Charts sauber durchlaufen.

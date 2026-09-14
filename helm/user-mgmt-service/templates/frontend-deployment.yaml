@@ -23,10 +23,20 @@ spec:
       labels:
         {{- include "user-mgmt-service.componentSelectorLabels" (dict "component" "frontend" "context" $) | nindent 8 }}
     spec:
+      # Satisfies the require-run-as-nonroot Kyverno ClusterPolicy
+      # (../../kyverno-policies) - also true at the image layer already
+      # (frontend/Dockerfile: USER nextjs), this just makes it explicit/enforced.
+      securityContext:
+        runAsNonRoot: true
       containers:
         - name: frontend
           image: {{ include "user-mgmt-service.image" (dict "image" .Values.frontend.image "context" $) }}
           imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 3000
           env:

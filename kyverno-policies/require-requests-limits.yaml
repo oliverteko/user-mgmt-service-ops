@@ -1,0 +1,39 @@
+# Adapted from https://kyverno.io/policies/best-practices/require-pod-requests-limits/
+# (upstream defaults to Audit; this enforces, and is scoped to our own
+# namespaces only - see README.md for why).
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-requests-limits
+  annotations:
+    policies.kyverno.io/title: Require Limits and Requests
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Every container must declare CPU and memory requests, and a memory
+      limit (no CPU limit requirement, to avoid throttling - matches
+      helm/user-mgmt-service's existing backend/frontend resources blocks).
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: validate-resources
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - user-mgmt-*
+      validate:
+        message: "CPU and memory resource requests and a memory limit are required for every container."
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  requests:
+                    memory: "?*"
+                    cpu: "?*"
+                  limits:
+                    memory: "?*"

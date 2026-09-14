@@ -1,0 +1,31 @@
+# Declarative config for the kyverno/kyverno chart, installed into the
+# dedicated `policy` namespace via argocd/application-kyverno.yaml
+# (multi-source Application, same pattern as helm/kube-prometheus-stack).
+# The actual ClusterPolicy objects live in ../../kyverno-policies/, applied
+# by a separate Application (argocd/application-kyverno-policies.yaml) -
+# they're custom resources, not part of this chart, and need Kyverno's CRDs
+# to exist first.
+
+# Single replica everywhere - HA (the chart's multi-replica default on some
+# controllers) isn't worth it for a course-scale cluster; keeps this from
+# competing with the app namespaces for the shared node's capacity.
+admissionController:
+  replicas: 1
+  container:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        memory: 384Mi
+
+backgroundController:
+  replicas: 1
+
+reportsController:
+  replicas: 1
+
+# CleanupPolicy resources aren't used here - no need for the cleanup
+# controller to run at all.
+cleanupController:
+  enabled: false

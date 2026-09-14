@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kyverno
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://kyverno.github.io/kyverno
+      chart: kyverno
+      targetRevision: 3.9.1
+      helm:
+        valueFiles:
+          - $values/helm/kyverno/values.yaml
+    - repoURL: https://github.com/oliverteko/user-mgmt-service-ops.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: policy
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # Same reasoning as kube-prometheus-stack (application-monitoring.yaml):
+      # Kyverno's CRDs are large enough that client-side apply's
+      # last-applied-configuration annotation can exceed the 262144 byte limit.
+      - ServerSideApply=true
