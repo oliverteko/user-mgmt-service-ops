@@ -24,7 +24,26 @@ kubectl create namespace user-mgmt-demo
 kubectl apply -f kyverno-policies/demo/bad-deployment.yaml
 ```
 
-Expected: the `kubectl apply` itself fails (admission webhook rejection, not a Pending/CrashLoopBackOff resource that then gets cleaned up), one error block per violated policy. The four `autogen-*` rule names below are the reliable part to look for; exact message wording may shift slightly across Kyverno versions.
+Expected: the `kubectl apply` itself fails (admission webhook rejection, not a Pending/CrashLoopBackOff resource that then gets cleaned up), one error block per violated policy. The rule names are the reliable part to look for; exact message wording may shift slightly across Kyverno versions.
+
+Actual result against the live cluster (2026-09-21, Kyverno chart 3.9.1 / v1.19.1) - `kubectl apply` exits with code 1 and `kubectl get deploy,pods -n user-mgmt-demo` afterwards shows `No resources found`:
+
+```
+Error from server: error when creating "kyverno-policies/demo/bad-deployment.yaml": admission webhook "validate.kyverno.svc-fail" denied the request:
+
+resource Deployment/user-mgmt-demo/policy-violation-demo was blocked due to the following policies
+
+disallow-latest-tag:
+  autogen-validate-image-tag: 'validation failure: validation error: Using a mutable image tag e.g. ''latest'' is not allowed. rule autogen-validate-image-tag failed at path /image/'
+require-probes:
+  require-probes: 'validation error: Every container must define both a readinessProbe and a livenessProbe. rule require-probes failed at path /spec/template/spec/containers/0/livenessProbe/'
+require-requests-limits:
+  autogen-validate-resources: 'validation error: CPU and memory resource requests and a memory limit are required for every container. rule autogen-validate-resources failed at path /spec/template/spec/containers/0/resources/limits/'
+require-run-as-nonroot:
+  autogen-run-as-non-root: 'validation error: Running as root is not allowed. Either spec.securityContext.runAsNonRoot must be true, or every container''s securityContext.runAsNonRoot must be true. rule autogen-run-as-non-root[0] failed at path /spec/template/spec/securityContext/runAsNonRoot/ rule autogen-run-as-non-root[1] failed at path /spec/template/spec/containers/0/securityContext/'
+```
+
+Enforcement also showed up unplanned during the rollout: a ReplicaSet still on the pre-policy pod template (no `runAsNonRoot`) tried to replace a deleted pod and got `FailedCreate ... admission webhook "validate.kyverno.svc-fail" denied the request` - existing pods keep running, but nothing non-compliant can be (re)created.
 
 Clean up afterwards - nothing was actually created, but the namespace was:
 
@@ -34,7 +53,7 @@ kubectl delete namespace user-mgmt-demo
 
 ## Verifying the real app still passes
 
-`helm/user-mgmt-service`'s `backend`/`frontend` Deployments were updated alongside these policies (pod-level `runAsNonRoot: true`, container-level `allowPrivilegeEscalation: false` + dropped capabilities) specifically so they comply - both container images already ran as non-root at the Docker layer already, this just makes Kyverno's check pass explicitly too. After `application-kyverno-policies.yaml` has synced:
+`helm/user-mgmt-service`'s `backend`/`frontend` Deployments were updated alongside these policies (pod-level `runAsNonRoot: true`, container-level `allowPrivilegeEscalation: false` + dropped capabilities) specifically so they comply - both container images already ran as non-root at the Docker layer already, this just makes Kyverno's check pass explicitly too. The images' `USER` is a *name* (`appuser`/`nextjs`), which the kubelet can't verify against `runAsNonRoot` (`CreateContainerConfigError: image has non-numeric user`), so the chart also sets the numeric `runAsUser: 100` / `runAsGroup: 101` those names map to. After `application-kyverno-policies.yaml` has synced:
 
 ```bash
 kubectl get deploy -n user-mgmt-staging
