@@ -91,9 +91,16 @@ frontend:
   replicaCount: 2
   service:
     port: 3000
+  # Same probe shape as the backend, and for the same reason: Kubernetes'
+  # default probe timeout is 1s, which a Next.js server under CPU contention
+  # can't always answer. That was killing the staging frontend with SIGTERM
+  # (exit 143) into CrashLoopBackOff even though nothing was actually wrong
+  # with it. startupProbe covers the boot, the timeout covers slow answers.
   probes:
-    initialDelaySeconds: 10
     periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+    startupFailureThreshold: 30
   resources:
     requests:
       cpu: 100m

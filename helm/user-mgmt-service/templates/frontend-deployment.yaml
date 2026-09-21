@@ -36,18 +36,29 @@ spec:
                   name: app-config
                   key: INTERNAL_API_URL
           # "/" is not gated by middleware.ts and doesn't depend on the backend,
-          # so it's a safe, unauthenticated probe target.
+          # so it's a safe, unauthenticated probe target. startupProbe gates
+          # the other two until Next.js has actually booted (see the comment
+          # on frontend.probes in values.yaml).
+          startupProbe:
+            httpGet:
+              path: /
+              port: 3000
+            periodSeconds: {{ .Values.frontend.probes.periodSeconds }}
+            timeoutSeconds: {{ .Values.frontend.probes.timeoutSeconds }}
+            failureThreshold: {{ .Values.frontend.probes.startupFailureThreshold }}
           readinessProbe:
             httpGet:
               path: /
               port: 3000
-            initialDelaySeconds: {{ .Values.frontend.probes.initialDelaySeconds }}
             periodSeconds: {{ .Values.frontend.probes.periodSeconds }}
+            timeoutSeconds: {{ .Values.frontend.probes.timeoutSeconds }}
+            failureThreshold: {{ .Values.frontend.probes.failureThreshold }}
           livenessProbe:
             httpGet:
               path: /
               port: 3000
-            initialDelaySeconds: {{ .Values.frontend.probes.initialDelaySeconds }}
             periodSeconds: {{ .Values.frontend.probes.periodSeconds }}
+            timeoutSeconds: {{ .Values.frontend.probes.timeoutSeconds }}
+            failureThreshold: {{ .Values.frontend.probes.failureThreshold }}
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
