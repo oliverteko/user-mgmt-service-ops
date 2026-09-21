@@ -3,6 +3,12 @@ kind: Application
 metadata:
   name: kyverno
   namespace: argocd
+  # Without this ArgoCD's client-side diff reports Kyverno's 11
+  # policies.kyverno.io CRDs as permanently OutOfSync even right after a
+  # successful server-side apply (live objects unchanged, resourceVersion
+  # stable) - comparing server-side as well makes the diff match the apply.
+  annotations:
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
 spec:
   project: default
   sources:
