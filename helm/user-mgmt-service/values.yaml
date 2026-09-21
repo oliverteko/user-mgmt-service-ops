@@ -45,6 +45,13 @@ backend:
     limits:
       cpu: 500m
       memory: 512Mi
+  # The image's ENTRYPOINT sets -XX:MaxRAMPercentage=75, which in a 512Mi
+  # container gives a ~384Mi heap - plus ~130Mi metaspace/code cache plus
+  # thread stacks, that overshoots the limit as soon as the heap fills, and
+  # the pod gets OOMKilled (seen live under the k6 load test). An explicit
+  # -Xmx takes precedence over MaxRAMPercentage, so this caps the heap
+  # without rebuilding the image. Keep it well under the memory limit.
+  javaToolOptions: "-Xmx256m"
   probes:
     # httpGet against actuator's health groups (management.endpoint.health.probes.enabled=true,
     # app repo application.properties; /actuator/health/** permitAll'd in

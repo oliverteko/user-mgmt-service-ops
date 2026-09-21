@@ -23,13 +23,17 @@ backend:
   # whole backend went unavailable mid-load-test (99.95% request failure)
   # even though the HPA was scaling correctly. 500m gives each replica room
   # to actually serve load and still answer health checks.
+  # On the 2 vCPU / 4 GB nodes, 500m/512Mi still wasn't enough: every replica
+  # sat at 100% CFS throttling for the whole test and got OOMKilled (see
+  # backend.javaToolOptions in values.yaml). 1 CPU / 768Mi plus the -Xmx cap
+  # leaves room for heap + metaspace + native memory under load.
   resources:
     requests:
       cpu: 150m
       memory: 256Mi
     limits:
-      cpu: 500m
-      memory: 512Mi
+      cpu: "1"
+      memory: 768Mi
   # Autoscaling enabled (unlike the earlier single-fixed-replica setup) so the
   # k6 load test (../../loadtest/) has something to actually exercise -
   # staging is where that controlled load runs, not prod. Ceiling kept lower
@@ -64,7 +68,7 @@ ingress:
   host: staging.user-mgmt.local
 
 # Sized to fit the backend at full HPA scale-out (3 x 150m/256Mi requests,
-# 3 x 500m/512Mi limits) plus frontend and postgres, with a little headroom -
+# 3 x 1/768Mi limits) plus frontend and postgres, with a little headroom -
 # the quota rejects pods outright once it's hit, so it has to allow for the
 # replicas the HPA is allowed to create, not just the steady-state one.
 resourceQuota:
@@ -72,5 +76,5 @@ resourceQuota:
     cpu: "1"
     memory: 1536Mi
   limits:
-    cpu: "3"
+    cpu: "4"
     memory: 3Gi

@@ -67,6 +67,10 @@ spec:
                 configMapKeyRef:
                   name: app-config
                   key: JWT_EXPIRATION_MILLIS
+            {{- with .Values.backend.javaToolOptions }}
+            - name: JAVA_TOOL_OPTIONS
+              value: {{ . | quote }}
+            {{- end }}
           # startupProbe gates readiness/liveness until the app is actually
           # up, so a slow cold start (observed live: 80-180s+ under node CPU
           # contention) can't get liveness-killed mid-startup - only this
