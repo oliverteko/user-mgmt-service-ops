@@ -23,7 +23,7 @@ kubectl create configmap k6-login-loadtest-script \
 kubectl apply -f loadtest/k6-job.yaml -n user-mgmt-staging
 ```
 
-Full run takes ~16 minutes (ramp to 10 VUs, ramp to 50, hold 50 for 5 min, ramp down, then a 6 min zero-load hold so scale-down has time to clear the HPA's default 5 min stabilization window). For a quick ~90s dry run, uncomment `QUICK_TEST: "true"` in `k6-job.yaml` before applying — that profile is too short to reliably trigger scale-down, only scale-up.
+Full run takes ~8 minutes (ramp to 5 VUs, ramp to 15, hold 15 for 3 min, ramp down, then a 3 min zero-load hold so scale-down has time to clear staging's 60s HPA stabilization window). Apply the Job with `-n user-mgmt-staging` — the manifest has no namespace of its own. For a quick ~90s dry run, uncomment `QUICK_TEST: "true"` in `k6-job.yaml` before applying — that profile is too short to reliably trigger scale-down, only scale-up.
 
 ## Watch it happen
 
