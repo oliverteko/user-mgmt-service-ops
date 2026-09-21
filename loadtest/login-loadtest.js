@@ -12,10 +12,10 @@ const BASE_URL = __ENV.TARGET_HOST || 'http://backend:8080';
 const loginErrors = new Rate('login_errors');
 
 // QUICK_TEST=true trims this to ~1.5 minutes for fast iteration/dry runs.
-// Without it, this is the ~16 minute profile meant to show a full HPA
+// Without it, this is the ~8 minute profile meant to show a full HPA
 // scale-up (during the plateau) and scale-down (during the trailing 0-VU
-// hold, long enough to clear the default 5 min scale-down stabilization
-// window).
+// hold, which relies on staging's 60s scale-down stabilization window -
+// backend.autoscaling.scaleDownStabilizationSeconds in values-staging.yaml).
 //
 // Peak VUs deliberately proportional to what staging can actually run:
 // backend.autoscaling maxes out at 3 replicas * 250m CPU limit = 750m total
@@ -35,11 +35,11 @@ const stages = __ENV.QUICK_TEST
       { duration: '30s', target: 0 },
     ]
   : [
-      { duration: '1m', target: 5 },
+      { duration: '30s', target: 5 },
+      { duration: '1m', target: 15 },
       { duration: '3m', target: 15 },
-      { duration: '5m', target: 15 },
-      { duration: '2m', target: 0 },
-      { duration: '6m', target: 0 },
+      { duration: '30s', target: 0 },
+      { duration: '3m', target: 0 },
     ];
 
 export const options = {

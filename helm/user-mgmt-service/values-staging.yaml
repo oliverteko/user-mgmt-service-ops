@@ -44,6 +44,9 @@ backend:
     enabled: true
     minReplicas: 1
     maxReplicas: 3
+    # Default is 300s; shorter here so the ~8 min k6 test can show the
+    # scale-down too.
+    scaleDownStabilizationSeconds: 60
   pdb:
     enabled: false
 

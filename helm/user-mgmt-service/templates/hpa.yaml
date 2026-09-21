@@ -24,4 +24,9 @@ spec:
         target:
           type: Utilization
           averageUtilization: {{ .Values.backend.autoscaling.targetCPUUtilizationPercentage }}
+  {{- with .Values.backend.autoscaling.scaleDownStabilizationSeconds }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: {{ . }}
+  {{- end }}
 {{- end }}
