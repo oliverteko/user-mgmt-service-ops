@@ -18,8 +18,8 @@ namespace: user-mgmt-prod
 # staging never deployed at all ("failed to get repo objects").
 #
 # Staging is where the k6 load test and HPA work happens (../../loadtest/),
-# so prod is parked to free ~700m for it. Postgres stays up so the namespace
-# and its PVC/data remain intact.
+# so prod is parked to free ~700m for it. Its data lives in the managed
+# database (../../terraform/database.tf), unaffected by the parking.
 #
 # To bring prod back: set replicaCount back to 2 for both and re-enable
 # backend.autoscaling - but the node pool needs to be bigger first, or this
