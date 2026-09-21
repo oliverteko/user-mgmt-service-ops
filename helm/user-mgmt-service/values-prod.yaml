@@ -6,3 +6,27 @@
 # resources/quota, hostless ingress) - only the namespace needs overriding.
 
 namespace: user-mgmt-prod
+
+# PARKED: backend/frontend scaled to 0 replicas.
+#
+# The DOKS node pool is 3 x (1 vCPU / 2 GB), and DOKS' own kube-system
+# components already reserve ~1536m of the ~2820m allocatable CPU (54%).
+# Running prod (800m) + staging + kube-prometheus-stack on top of that left
+# every node at 88-99% of CPU requests, which starved ArgoCD (installed with
+# no resource requests, so it's best-effort and evicted first) - its
+# repo-server restarted repeatedly and could no longer render charts, so
+# staging never deployed at all ("failed to get repo objects").
+#
+# Staging is where the k6 load test and HPA work happens (../../loadtest/),
+# so prod is parked to free ~700m for it. Postgres stays up so the namespace
+# and its PVC/data remain intact.
+#
+# To bring prod back: set replicaCount back to 2 for both and re-enable
+# backend.autoscaling - but the node pool needs to be bigger first, or this
+# same starvation returns.
+backend:
+  replicaCount: 0
+  autoscaling:
+    enabled: false
+frontend:
+  replicaCount: 0
