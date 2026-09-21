@@ -1,0 +1,63 @@
+# __generated__ by Terraform
+# Please review these resources and move them into your main configuration files.
+
+# __generated__ by Terraform
+resource "digitalocean_kubernetes_cluster" "this" {
+  auto_upgrade                     = false
+  cluster_subnet                   = "10.150.0.0/16"
+  destroy_all_associated_resources = null
+  ha                               = false
+  isolated_workers                 = false
+  kubeconfig_expire_seconds        = null
+  name                             = "k8s-1-36-3-do-5-fra1-1789986939190"
+  region                           = "fra1"
+  registry_integration             = null
+  service_subnet                   = "10.109.32.0/19"
+  surge_upgrade                    = true
+  tags                             = []
+  version                          = "1.36.3-do.5"
+  vpc_uuid                         = "e6d604fe-e3a0-4d73-9d25-fbd31e6fc3ed"
+  worker_subnet_uuid               = "d38ff1e3-fcdf-4b7e-93f6-ae2c7b30ae69"
+  amd_gpu_device_metrics_exporter_plugin {
+    enabled = false
+  }
+  amd_gpu_device_plugin {
+    enabled = false
+  }
+  amd_gpu_dra_driver {
+    enabled = false
+  }
+  coredns_autoscaler {
+    enabled = true
+  }
+  maintenance_policy {
+    day        = "any"
+    start_time = "19:00"
+  }
+  node_pool {
+    auto_scale         = true
+    gpu_partition_mode = null
+    labels             = {}
+    max_nodes          = 5
+    min_nodes          = 3
+    name               = "pool-lvfj9vjl1"
+    node_count         = 0
+    size               = "s-2vcpu-4gb"
+    tags               = []
+  }
+  nvidia_gpu_device_plugin {
+    enabled = false
+  }
+  nvidia_gpu_dra_driver {
+    enabled = false
+  }
+  p2p_oci_registry_plugin {
+    enabled = false
+  }
+  rdma_shared_device_plugin {
+    enabled = false
+  }
+  routing_agent {
+    enabled = false
+  }
+}

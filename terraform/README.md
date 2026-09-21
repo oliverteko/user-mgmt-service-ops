@@ -6,12 +6,25 @@ Brings the **existing** DigitalOcean Kubernetes cluster (created manually/via `d
 
 - [x] DigitalOcean provider configured ([`versions.tf`](versions.tf), [`provider.tf`](provider.tf))
 - [x] Import block referencing the cluster by ID ([`import.tf`](import.tf))
-- [x] `terraform fmt` / `terraform init` / `terraform validate` pass on this scaffold (verified without real credentials - see "Validated so far" below)
-- [ ] **Not yet run**: `terraform plan -generate-config-out=generated.tf` against the real cluster (needs a real `do_token` + `cluster_id` - see "Prerequisites")
-- [ ] `generated.tf` analyzed, cleaned up, folded into `main.tf`
-- [ ] Reusable values (region, node pool size/count, k8s version, ...) pulled into `variables.tf`
-- [ ] `generated.tf` deleted once its content lives in `main.tf`
-- [ ] Final `terraform fmt` / `validate` / `plan` (no unintended changes) against the real cluster
+- [x] `terraform plan -generate-config-out=generated.tf` run against the real cluster - raw output kept as [`docs/generated.tf.orig`](docs/generated.tf.orig)
+- [x] `generated.tf` analyzed and cleaned up into [`main.tf`](main.tf) (see "Bereinigung von generated.tf" below), `generated.tf` deleted
+- [x] Reusable values (name, region, version, node pool size/min/max, maintenance window, ...) in [`variables.tf`](variables.tf)
+- [x] `terraform fmt` / `validate` pass; import applied (state only); `terraform plan` → `No changes. Your infrastructure matches the configuration.`
+
+## Bereinigung von generated.tf
+
+Was `-generate-config-out` erzeugt hat ([`docs/generated.tf.orig`](docs/generated.tf.orig)) und was davon in [`main.tf`](main.tf) übrig blieb:
+
+| Generiert | Entscheidung | Grund |
+|---|---|---|
+| `destroy_all_associated_resources`, `kubeconfig_expire_seconds`, `registry_integration`, `gpu_partition_mode` = `null` | entfernt | nicht gesetzt = Provider-Default |
+| `tags = []`, `labels = {}`, `isolated_workers = false` | entfernt | leer/Default |
+| alle GPU-/Plugin-Blöcke (`amd_gpu_*`, `nvidia_gpu_*`, `p2p_oci_registry_plugin`, `rdma_shared_device_plugin`, `routing_agent`, `coredns_autoscaler`) | entfernt | alle auf Default; `*_device_plugin` und `*_dra_driver` schliessen sich zudem gegenseitig aus - mit ihnen scheitert `validate` ("Conflicting configuration arguments") |
+| `node_pool.node_count = 0` | entfernt | bei `auto_scale = true` bestimmt der Autoscaler die Anzahl, konfiguriert sind nur `min_nodes`/`max_nodes` |
+| `vpc_uuid`, `cluster_subnet`, `service_subnet`, `worker_subnet_uuid` | entfernt | von DigitalOcean bei der Erstellung vergeben (computed), nur per Neuerstellung änderbar |
+| `name`, `region`, `version`, `ha`, `auto_upgrade`, `surge_upgrade`, `maintenance_policy`, `node_pool.{name,size,min_nodes,max_nodes}` | behalten, als Variablen | das ist die eigentliche, bewusst gewählte Konfiguration |
+
+Nach der Bereinigung: `Plan: 1 to import, 0 to add, 0 to change, 0 to destroy`, nach dem Import-Apply `No changes`.
 
 ## Prerequisites
 
@@ -46,7 +59,7 @@ Next:
 
 Once `plan` is clean, the `import` block in `import.tf` can be deleted (its job is done - the resource is in state) or left in place (re-applying it is a no-op).
 
-## Validated so far
+## Validated so far (scaffold phase, before real credentials)
 
 Without real credentials, from this environment: `terraform fmt -check`, `terraform init`, and `terraform validate` all pass. `terraform plan -generate-config-out=...` was smoke-tested with a placeholder token/ID to confirm the import block, provider wiring and DigitalOcean API call all fire correctly - it fails only on `401 Unable to authenticate you`, as expected without a real token. One thing worth knowing if you touch `import.tf`: without an explicit `provider = digitalocean` argument on the `import` block, Terraform's implied-provider resolution falls back to `hashicorp/digitalocean` (wrong namespace) instead of consulting `required_providers`, when there's no matching `resource` block yet to anchor it - the explicit `provider` argument works around that.
 

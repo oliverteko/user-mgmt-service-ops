@@ -17,8 +17,12 @@
 # This block can stay in place afterwards - re-applying an already-imported
 # resource is a no-op - but is commonly removed once step 5 is green, since
 # its only job is the one-time import.
+#
+# Only while generating config (no resource block yet) does this need an
+# explicit `provider = digitalocean` - otherwise Terraform guesses the wrong
+# namespace (hashicorp/digitalocean). Once main.tf defines the resource,
+# Terraform rejects that argument, so it's gone again.
 import {
-  to       = digitalocean_kubernetes_cluster.this
-  id       = var.cluster_id
-  provider = digitalocean
+  to = digitalocean_kubernetes_cluster.this
+  id = var.cluster_id
 }
