@@ -13,7 +13,7 @@ Two independent pieces of DigitalOcean infrastructure managed from this director
 - [x] `generated.tf` analyzed and cleaned up into [`main.tf`](main.tf) (see "Bereinigung von generated.tf" below), `generated.tf` deleted
 - [x] Reusable values (name, region, version, node pool size/min/max, maintenance window, ...) in [`variables.tf`](variables.tf)
 - [x] `terraform fmt` / `validate` pass; import applied (state only); `terraform plan` → `No changes. Your infrastructure matches the configuration.`
-- [ ] Managed PostgreSQL (database.tf) created via `terraform apply`, chart + `app-secret` pointed at it
+- [x] Managed PostgreSQL (database.tf) created via `terraform apply` (5 resources), chart + `app-secret` pointed at it; `terraform plan` → `No changes` for cluster + database together
 
 ## Bereinigung von generated.tf
 
@@ -85,7 +85,12 @@ After it exists:
 1. `terraform output database_host` / `database_port` → `helm/user-mgmt-service/values.yaml` `database.host`/`database.port` (shared across environments).
 2. `terraform output staging_database_name` / `prod_database_name` should already match `values-staging.yaml`/`values.yaml`'s `database.name` (they're the same literal defaults on both sides - only re-check if you changed `variables.tf`).
 3. `terraform output database_user` and `terraform output -raw database_password` → the `app-secret` Kubernetes Secret's `DB_USERNAME`/`DB_PASSWORD` (see `argocd-bootstrap.yml` in the App-Repo, and "Secrets" in `helm/user-mgmt-service/README.md`) - never into a committed file.
-4. `helm lint`/`helm template` the chart again once `database.host` is a real value (not the `REPLACE_ME` placeholder) to confirm the rendered `SPRING_DATASOURCE_URL` looks right.
+4. **Einmalig: Schema-Rechte vergeben.** Ab PostgreSQL 15 darf ein neuer User im Schema `public` keine Tabellen mehr anlegen, und Terraform kann das nicht (die Datenbank ist nur aus dem Cluster erreichbar, `digitalocean_database_firewall`). Ohne das scheitert Hibernate (`ddl-auto=update`) mit `permission denied for schema public`. Als `doadmin` aus einem kurzlebigen Pod im Cluster, pro Datenbank:
+   ```sql
+   GRANT USAGE, CREATE ON SCHEMA public TO user_mgmt_service;
+   ```
+   Das `doadmin`-Passwort steht im Terraform-State (`digitalocean_database_cluster.postgres.password`) bzw. im DO-Control-Panel - nur temporär als Kubernetes Secret für diesen Pod anlegen und danach wieder löschen.
+5. `helm lint`/`helm template` the chart again once `database.host` is a real value (not the `REPLACE_ME` placeholder) to confirm the rendered `SPRING_DATASOURCE_URL` looks right.
 
 ## Validated so far (scaffold phase, before real credentials)
 

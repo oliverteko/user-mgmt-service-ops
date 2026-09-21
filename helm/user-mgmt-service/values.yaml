@@ -13,7 +13,7 @@ fullnameOverride: ""
 # this default matches the prod database, values-staging.yaml overrides it,
 # same pattern as ingress.host below.
 database:
-  host: "REPLACE_ME.db.ondigitalocean.com" # terraform output database_host
+  host: "private-user-mgmt-postgres-do-user-42390838-0.h.db.ondigitalocean.com" # terraform output database_host
   port: 25060 # terraform output database_port
   name: user_mgmt_prod
   sslMode: require

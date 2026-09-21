@@ -34,6 +34,13 @@ resource "digitalocean_database_db" "prod" {
 resource "digitalocean_database_user" "app" {
   cluster_id = digitalocean_database_cluster.postgres.id
   name       = var.database_user_name
+
+  # DigitalOcean fills in a default `settings` block after creation that the
+  # config never sets, so every plan would otherwise show a spurious in-place
+  # "remove settings" change on this user.
+  lifecycle {
+    ignore_changes = [settings]
+  }
 }
 
 # DO denies all connections to a managed database until trusted sources are
