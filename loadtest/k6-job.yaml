@@ -16,6 +16,10 @@ spec:
         app.kubernetes.io/name: k6-loadtest
     spec:
       restartPolicy: Never
+      # Required by the require-run-as-nonroot Kyverno policy
+      # (../kyverno-policies) - the k6 image already runs as a non-root user.
+      securityContext:
+        runAsNonRoot: true
       containers:
         - name: k6
           image: grafana/k6:1.7.0
@@ -34,7 +38,7 @@ spec:
               value: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/write"
             - name: K6_PROMETHEUS_RW_TREND_STATS
               value: "p(95),p(99),min,max"
-            # Uncomment for a ~1.5 minute dry run instead of the full ~16
+            # Uncomment for a ~1.5 minute dry run instead of the full ~8
             # minute scale-up/scale-down profile:
             # - name: QUICK_TEST
             #   value: "true"

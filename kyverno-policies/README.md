@@ -7,9 +7,9 @@ Four `ClusterPolicy` objects, applied via [`argocd/application-kyverno-policies.
 | [`require-requests-limits.yaml`](require-requests-limits.yaml) | Missing CPU/memory requests or memory limit on any container |
 | [`disallow-latest-tag.yaml`](disallow-latest-tag.yaml) | Missing image tag, or `:latest` |
 | [`require-run-as-nonroot.yaml`](require-run-as-nonroot.yaml) | No `runAsNonRoot: true` (pod- or container-level) |
-| [`require-probes.yaml`](require-probes.yaml) | Missing `readinessProbe` or `livenessProbe` |
+| [`require-probes.yaml`](require-probes.yaml) | Missing `readinessProbe` or `livenessProbe` on a Deployment/StatefulSet/DaemonSet |
 
-All four: `validationFailureAction: Enforce` (rejects at admission, not just an audit log entry) and `match.any[].resources.kinds: [Pod]` - Kyverno's default [pod-controller autogen](https://kyverno.io/docs/writing-policies/autogen/) then automatically derives equivalent rules for `Deployment`/`StatefulSet`/`DaemonSet`/`Job`/`CronJob`, so a `kubectl apply` of a bad `Deployment` gets rejected directly, without having to write the rule twice.
+All four: `validationFailureAction: Enforce` (rejects at admission, not just an audit log entry). The first three match `kinds: [Pod]` - Kyverno's default [pod-controller autogen](https://kyverno.io/docs/writing-policies/autogen/) then automatically derives equivalent rules for `Deployment`/`StatefulSet`/`DaemonSet`/`Job`/`CronJob`, so a `kubectl apply` of a bad `Deployment` gets rejected directly, without having to write the rule twice. `require-probes` is the exception: it matches the long-running workload kinds directly with autogen off, because a run-to-completion `Job` (like the [k6 load test](../loadtest/README.md)) has nothing meaningful to probe and would otherwise be blocked.
 
 ## Why scoped to `user-mgmt-*` namespaces only
 
@@ -81,6 +81,8 @@ helm template user-mgmt-service ../helm/user-mgmt-service -f ../helm/user-mgmt-s
 kyverno apply kyverno-policies/*.yaml --resource /tmp/staging.yaml --resource /tmp/prod.yaml
 # pass: 20, fail: 0, warn: 0, error: 0, skip: 0
 ```
+
+The k6 load-test Job (`loadtest/k6-job.yaml`, with `namespace: user-mgmt-staging` added) passes too: `pass: 4, fail: 0`.
 
 One gotcha hit while writing `require-probes.yaml`: an early version used `readinessProbe: "?*"` / `livenessProbe: "?*"` to check presence, which passed the CLI's own policy validation but **silently failed against real Deployments that do have both probes** - `"?*"` is a string-wildcard pattern (works for `require-requests-limits`' `memory: "?*"`, since `memory` is a string), but `readinessProbe`/`livenessProbe` are objects, and Kyverno's pattern matching doesn't coerce an object into that check the way you'd hope. Fixed by matching `{}` (empty object = "must exist as an object") instead. Caught here only because the real chart was tested against the policy, not just the intentionally-bad demo manifest - a reminder that a policy that correctly rejects a bad resource can still be silently wrong for the resources it's supposed to let through.
 

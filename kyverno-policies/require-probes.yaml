@@ -1,5 +1,10 @@
 # Not from the upstream library - written for this project. Scoped to our
 # own namespaces only - see README.md for why.
+#
+# Unlike the other three policies this one matches the long-running
+# workload kinds directly instead of Pod: a run-to-completion Job (e.g. the
+# k6 load test in ../loadtest/) has nothing meaningful to probe, so Kyverno's
+# Pod autogen (which would also cover Job/CronJob) is switched off here.
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
@@ -8,15 +13,16 @@ metadata:
     policies.kyverno.io/title: Require Readiness and Liveness Probes
     policies.kyverno.io/category: Best Practices
     policies.kyverno.io/severity: medium
-    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/subject: Deployment, StatefulSet, DaemonSet
     policies.kyverno.io/description: >-
-      Every container must define both a readinessProbe and a livenessProbe
-      (any probe type - httpGet/tcpSocket/exec all satisfy this, only
-      presence is checked). Without a readinessProbe a Service can route
-      traffic to a pod before it's actually able to handle it; without a
-      livenessProbe Kubernetes can't detect and restart a wedged container.
-      helm/user-mgmt-service's backend (tcpSocket) and frontend (httpGet)
-      both already declare both.
+      Every container of a long-running workload must define both a
+      readinessProbe and a livenessProbe (any probe type - httpGet/tcpSocket/
+      exec all satisfy this, only presence is checked). Without a
+      readinessProbe a Service can route traffic to a pod before it's
+      actually able to handle it; without a livenessProbe Kubernetes can't
+      detect and restart a wedged container. helm/user-mgmt-service's backend
+      and frontend both declare both (httpGet).
+    pod-policies.kyverno.io/autogen-controllers: none
 spec:
   validationFailureAction: Enforce
   background: true
@@ -26,13 +32,17 @@ spec:
         any:
           - resources:
               kinds:
-                - Pod
+                - Deployment
+                - StatefulSet
+                - DaemonSet
               namespaces:
                 - user-mgmt-*
       validate:
         message: "Every container must define both a readinessProbe and a livenessProbe."
         pattern:
           spec:
-            containers:
-              - readinessProbe: {}
-                livenessProbe: {}
+            template:
+              spec:
+                containers:
+                  - readinessProbe: {}
+                    livenessProbe: {}
