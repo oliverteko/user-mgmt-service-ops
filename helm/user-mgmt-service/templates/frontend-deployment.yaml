@@ -26,8 +26,13 @@ spec:
       # Satisfies the require-run-as-nonroot Kyverno ClusterPolicy
       # (../../kyverno-policies) - also true at the image layer already
       # (frontend/Dockerfile: USER nextjs), this just makes it explicit/enforced.
+      # The image's USER is a name (nextjs), which the kubelet can't check
+      # against runAsNonRoot ("image has non-numeric user") - so the numeric
+      # UID/GID it maps to inside the image (uid=100, gid=101) is set here.
       securityContext:
         runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
       containers:
         - name: frontend
           image: {{ include "user-mgmt-service.image" (dict "image" .Values.frontend.image "context" $) }}
