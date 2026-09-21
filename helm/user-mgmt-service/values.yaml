@@ -39,6 +39,12 @@ backend:
   # -Xmx takes precedence over MaxRAMPercentage, so this caps the heap
   # without rebuilding the image. Keep it well under the memory limit.
   javaToolOptions: "-Xmx256m"
+  # JDBC connections per backend pod (Hikari's default is 10). The managed
+  # database (db-s-1vcpu-1gb) only allows ~22 non-superuser connections in
+  # total, shared by staging + prod: at full scale-out (3 + 4 replicas) plus
+  # a rolling-update surge pod each, 9 pods x 2 = 18 still fits. Logins are
+  # bcrypt-bound, not DB-bound, so 2 is plenty.
+  dbPoolSize: 2
   probes:
     # httpGet against actuator's health groups (management.endpoint.health.probes.enabled=true,
     # app repo application.properties; /actuator/health/** permitAll'd in

@@ -82,6 +82,8 @@ spec:
                 configMapKeyRef:
                   name: app-config
                   key: JWT_EXPIRATION_MILLIS
+            - name: SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE
+              value: {{ .Values.backend.dbPoolSize | quote }}
             {{- with .Values.backend.javaToolOptions }}
             - name: JAVA_TOOL_OPTIONS
               value: {{ . | quote }}
