@@ -1,0 +1,143 @@
+{{- if .Values.moduleService.enabled }}
+# module_service (Python/FastAPI, image built from the app repo's
+# module_service/). Owns the modules and the user<->module assignments in its
+# own DigitalOcean Managed MySQL (../../terraform/mysql.tf); the backend only
+# reaches it via the module-service Service. Scales vertically: one uvicorn
+# process per pod, sized via moduleService.resources.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: module-service
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "user-mgmt-service.componentLabels" (dict "component" "module-service" "context" $) | nindent 4 }}
+spec:
+  replicas: {{ .Values.moduleService.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "user-mgmt-service.componentSelectorLabels" (dict "component" "module-service" "context" $) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "user-mgmt-service.componentSelectorLabels" (dict "component" "module-service" "context" $) | nindent 8 }}
+      annotations:
+        # roll the pods when the CA certificate changes (e.g. after a rebuild)
+        checksum/mysql-ca: {{ .Values.moduleService.database.caCertificate | sha256sum }}
+    spec:
+      # Kyverno require-run-as-nonroot; the image's USER is numeric (10001)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+      containers:
+        - name: module-service
+          image: {{ include "user-mgmt-service.image" (dict "image" .Values.moduleService.image "context" $) }}
+          imagePullPolicy: {{ .Values.moduleService.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            # Only this Deployment references module-service-secret - the
+            # backend never gets the MySQL credentials.
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.moduleService.secretName }}
+                  key: DB_PASSWORD
+            - name: DATABASE_URL
+              value: "mysql+pymysql://{{ .Values.moduleService.database.user }}:$(DB_PASSWORD)@{{ .Values.moduleService.database.host }}:{{ .Values.moduleService.database.port }}/{{ .Values.moduleService.database.name }}?charset=utf8mb4"
+            # DigitalOcean Managed MySQL only accepts TLS - verify it against
+            # the cluster's CA certificate
+            - name: MYSQL_SSL_DISABLED
+              value: "false"
+            - name: MYSQL_SSL_CA
+              value: /etc/mysql-ca/ca.crt
+            - name: LOG_LEVEL
+              value: {{ .Values.moduleService.logLevel | quote }}
+          volumeMounts:
+            - name: mysql-ca
+              mountPath: /etc/mysql-ca
+              readOnly: true
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: {{ .Values.moduleService.probes.periodSeconds }}
+            timeoutSeconds: {{ .Values.moduleService.probes.timeoutSeconds }}
+            failureThreshold: {{ .Values.moduleService.probes.startupFailureThreshold }}
+          # readiness includes a SELECT 1 against MySQL, so a pod that lost
+          # its database drops out of the Service instead of answering 500s
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: {{ .Values.moduleService.probes.periodSeconds }}
+            timeoutSeconds: {{ .Values.moduleService.probes.timeoutSeconds }}
+            failureThreshold: {{ .Values.moduleService.probes.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: {{ .Values.moduleService.probes.periodSeconds }}
+            timeoutSeconds: {{ .Values.moduleService.probes.timeoutSeconds }}
+            failureThreshold: {{ .Values.moduleService.probes.failureThreshold }}
+          resources:
+            {{- toYaml .Values.moduleService.resources | nindent 12 }}
+      volumes:
+        - name: mysql-ca
+          configMap:
+            name: module-service-mysql-ca
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: module-service-mysql-ca
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "user-mgmt-service.componentLabels" (dict "component" "module-service" "context" $) | nindent 4 }}
+data:
+  # terraform output -raw module_database_ca_certificate (public, not secret)
+  ca.crt: |
+    {{- .Values.moduleService.database.caCertificate | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: module-service
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "user-mgmt-service.componentLabels" (dict "component" "module-service" "context" $) | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "user-mgmt-service.componentSelectorLabels" (dict "component" "module-service" "context" $) | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.moduleService.service.port }}
+      targetPort: http
+{{- if .Values.moduleService.pdb.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: module-service
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "user-mgmt-service.componentLabels" (dict "component" "module-service" "context" $) | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.moduleService.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "user-mgmt-service.componentSelectorLabels" (dict "component" "module-service" "context" $) | nindent 6 }}
+{{- end }}
+{{- end }}

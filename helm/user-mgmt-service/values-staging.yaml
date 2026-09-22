@@ -60,6 +60,13 @@ frontend:
   pdb:
     enabled: false
 
+moduleService:
+  replicaCount: 1
+  database:
+    name: module_service_staging
+  pdb:
+    enabled: false
+
 ingress:
   # Distinct from prod's hostless rule so both can coexist behind the same
   # Traefik controller. Test via Host header or an /etc/hosts entry pointing
@@ -67,7 +74,8 @@ ingress:
   host: staging.user-mgmt.local
 
 # Sized to fit the backend at full HPA scale-out (3 x 150m/256Mi requests,
-# 3 x 1/768Mi limits) plus frontend and postgres, with a little headroom -
+# 3 x 1/768Mi limits) plus frontend, module-service and the k6 load-test Job,
+# with a little headroom -
 # the quota rejects pods outright once it's hit, so it has to allow for the
 # replicas the HPA is allowed to create, not just the steady-state one.
 resourceQuota:
@@ -75,5 +83,5 @@ resourceQuota:
     cpu: "1"
     memory: 1536Mi
   limits:
-    cpu: "4"
-    memory: 3Gi
+    cpu: "5"
+    memory: 4Gi

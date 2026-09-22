@@ -75,9 +75,10 @@ grafana:
     hosts:
       - grafana.user-mgmt.local
     path: /
-  # Custom dashboard for the user-mgmt-service backend: request rate,
-  # response time and error rate, all derived from the actuator/prometheus
-  # metrics scraped via the backend ServiceMonitor.
+  # Custom dashboards: backend HTTP (request rate, response time, error rate
+  # from actuator/prometheus), load test & HPA, and the module_service
+  # (request rate, response time, error rate from its /metrics, resources vs.
+  # limits, and the backend's timeout/retry/circuit-breaker view of it).
   dashboardProviders:
     dashboardproviders.yaml:
       apiVersion: 1
@@ -239,6 +240,365 @@ grafana:
                   {
                     "expr": "sum(rate(http_server_requests_seconds_count{job=\"backend\", status=~\"5..\"}[5m])) by (namespace) / sum(rate(http_server_requests_seconds_count{job=\"backend\"}[5m])) by (namespace)",
                     "legendFormat": "{{namespace}}",
+                    "refId": "A"
+                  }
+                ]
+              }
+            ]
+          }
+      module-service:
+        json: |
+          {
+            "title": "user-mgmt-service / Module Service",
+            "uid": "user-mgmt-service-module-service",
+            "schemaVersion": 39,
+            "version": 1,
+            "timezone": "browser",
+            "refresh": "10s",
+            "time": {
+              "from": "now-30m",
+              "to": "now"
+            },
+            "panels": [
+              {
+                "id": 100,
+                "type": "row",
+                "title": "module_service HTTP (from its /metrics)",
+                "collapsed": false,
+                "gridPos": {
+                  "h": 1,
+                  "w": 24,
+                  "x": 0,
+                  "y": 0
+                },
+                "panels": []
+              },
+              {
+                "id": 1,
+                "title": "Request Rate",
+                "type": "timeseries",
+                "gridPos": {
+                  "h": 8,
+                  "w": 8,
+                  "x": 0,
+                  "y": 1
+                },
+                "fieldConfig": {
+                  "defaults": {
+                    "unit": "reqps"
+                  },
+                  "overrides": []
+                },
+                "targets": [
+                  {
+                    "expr": "sum(rate(http_requests_total{job=\"module-service\"}[1m])) by (namespace)",
+                    "legendFormat": "{{namespace}}",
+                    "refId": "A"
+                  }
+                ]
+              },
+              {
+                "id": 2,
+                "title": "Response Time (p95 / avg)",
+                "type": "timeseries",
+                "gridPos": {
+                  "h": 8,
+                  "w": 8,
+                  "x": 8,
+                  "y": 1
+                },
+                "fieldConfig": {
+                  "defaults": {
+                    "unit": "s"
+                  },
+                  "overrides": []
+                },
+                "targets": [
+                  {
+                    "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"module-service\"}[1m])) by (le, namespace))",
+                    "legendFormat": "p95 {{namespace}}",
+                    "refId": "A"
+                  },
+                  {
+                    "expr": "sum(rate(http_request_duration_seconds_sum{job=\"module-service\"}[1m])) by (namespace) / sum(rate(http_request_duration_seconds_count{job=\"module-service\"}[1m])) by (namespace)",
+                    "legendFormat": "avg {{namespace}}",
+                    "refId": "B"
+                  }
+                ]
+              },
+              {
+                "id": 3,
+                "title": "Error Rate (5xx)",
+                "type": "timeseries",
+                "gridPos": {
+                  "h": 8,
+                  "w": 8,
+                  "x": 16,
+                  "y": 1
+                },
+                "fieldConfig": {
+                  "defaults": {
+                    "unit": "percentunit"
+                  },
+                  "overrides": []
+                },
+                "targets": [
+                  {
+                    "expr": "sum(rate(http_requests_total{job=\"module-service\", status=\"5xx\"}[1m])) by (namespace) / sum(rate(http_requests_total{job=\"module-service\"}[1m])) by (namespace)",
+                    "legendFormat": "{{namespace}}",
+                    "refId": "A"
+                  }
+                ]
+              },
+              {
+                "id": 4,
+                "title": "Requests by Endpoint and Status",
+                "type": "timeseries",
+                "gridPos": {
+                  "h": 8,
+                  "w": 24,
+                  "x": 0,
+                  "y": 9
+                },
+                "fieldConfig": {
+                  "defaults": {
+                    "unit": "reqps"
+                  },
+                  "overrides": []
+                },
+                "targets": [
+                  {
+                    "expr": "sum(rate(http_requests_total{job=\"module-service\"}[1m])) by (namespace, method, handler, status)",
+                    "legendFormat": "{{namespace}} {{method}} {{handler}} {{status}}",
+                    "refId": "A"
+                  }
+                ]
+              },
+              {
+                "id": 101,
+                "type": "row",
+                "title": "Resources vs. limits (vertical scaling)",
+                "collapsed": false,
+                "gridPos": {
+                  "h": 1,
+                  "w": 24,
+                  "x": 0,
+                  "y": 17
+                },
+                "panels": []
+              },
+              {
+                "id": 5,
+                "title": "CPU per Pod vs. Limit",
+                "type": "timeseries",
+                "gridPos": {
+                  "h": 8,
+                  "w": 12,
+                  "x": 0,
+                  "y": 18
+                },
+                "fieldConfig": {
+                  "defaults": {
+                    "unit": "cores"
+                  },
+                  "overrides": []
+                },
+                "targets": [
+                  {
+                    "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=~\"user-mgmt-.*\", pod=~\"module-service-.*\", container=\"module-service\"}[1m])) by (namespace, pod)",
+                    "legendFormat": "{{namespace}} {{pod}}",
+                    "refId": "A"
+                  },
+                  {
+                    "expr": "max(kube_pod_container_resource_limits{namespace=~\"user-mgmt-.*\", pod=~\"module-service-.*\", container=\"module-service\", resource=\"cpu\"}) by (namespace)",
+                    "legendFormat": "limit {{namespace}}",
+                    "refId": "B"
+                  }
+                ]
+              },
+              {
+                "id": 6,
+                "title": "Memory per Pod vs. Limit",
+                "type": "timeseries",
+                "gridPos": {
+                  "h": 8,
+                  "w": 12,
+                  "x": 12,
+                  "y": 18
+                },
+                "fieldConfig": {
+                  "defaults": {
+                    "unit": "bytes"
+                  },
+                  "overrides": []
+                },
+                "targets": [
+                  {
+                    "expr": "sum(container_memory_working_set_bytes{namespace=~\"user-mgmt-.*\", pod=~\"module-service-.*\", container=\"module-service\"}) by (namespace, pod)",
+                    "legendFormat": "{{namespace}} {{pod}}",
+                    "refId": "A"
+                  },
+                  {
+                    "expr": "max(kube_pod_container_resource_limits{namespace=~\"user-mgmt-.*\", pod=~\"module-service-.*\", container=\"module-service\", resource=\"memory\"}) by (namespace)",
+                    "legendFormat": "limit {{namespace}}",
+                    "refId": "B"
+                  }
+                ]
+              },
+              {
+                "id": 7,
+                "title": "CPU Throttling",
+                "type": "timeseries",
+                "gridPos": {
+                  "h": 8,
+                  "w": 12,
+                  "x": 0,
+                  "y": 26
+                },
+                "fieldConfig": {
+                  "defaults": {
+                    "unit": "percentunit"
+                  },
+                  "overrides": []
+                },
+                "targets": [
+                  {
+                    "expr": "sum(rate(container_cpu_cfs_throttled_periods_total{namespace=~\"user-mgmt-.*\", pod=~\"module-service-.*\", container=\"module-service\"}[1m])) by (namespace, pod) / sum(rate(container_cpu_cfs_periods_total{namespace=~\"user-mgmt-.*\", pod=~\"module-service-.*\", container=\"module-service\"}[1m])) by (namespace, pod)",
+                    "legendFormat": "{{namespace}} {{pod}}",
+                    "refId": "A"
+                  }
+                ]
+              },
+              {
+                "id": 8,
+                "title": "Container Restarts",
+                "type": "timeseries",
+                "gridPos": {
+                  "h": 8,
+                  "w": 12,
+                  "x": 12,
+                  "y": 26
+                },
+                "fieldConfig": {
+                  "defaults": {
+                    "unit": "short"
+                  },
+                  "overrides": []
+                },
+                "targets": [
+                  {
+                    "expr": "sum(kube_pod_container_status_restarts_total{namespace=~\"user-mgmt-.*\", container=\"module-service\"}) by (namespace, pod)",
+                    "legendFormat": "{{namespace}} {{pod}}",
+                    "refId": "A"
+                  }
+                ]
+              },
+              {
+                "id": 102,
+                "type": "row",
+                "title": "Backend -> module_service (timeout / retry / circuit breaker)",
+                "collapsed": false,
+                "gridPos": {
+                  "h": 1,
+                  "w": 24,
+                  "x": 0,
+                  "y": 34
+                },
+                "panels": []
+              },
+              {
+                "id": 9,
+                "title": "Backend Client Calls by Outcome",
+                "type": "timeseries",
+                "gridPos": {
+                  "h": 8,
+                  "w": 8,
+                  "x": 0,
+                  "y": 35
+                },
+                "fieldConfig": {
+                  "defaults": {
+                    "unit": "reqps"
+                  },
+                  "overrides": []
+                },
+                "targets": [
+                  {
+                    "expr": "sum(rate(http_client_requests_seconds_count{job=\"backend\", client_name=\"module-service\"}[1m])) by (namespace, outcome)",
+                    "legendFormat": "{{namespace}} {{outcome}}",
+                    "refId": "A"
+                  }
+                ]
+              },
+              {
+                "id": 10,
+                "title": "Backend Client Latency (avg)",
+                "type": "timeseries",
+                "gridPos": {
+                  "h": 8,
+                  "w": 8,
+                  "x": 8,
+                  "y": 35
+                },
+                "fieldConfig": {
+                  "defaults": {
+                    "unit": "s"
+                  },
+                  "overrides": []
+                },
+                "targets": [
+                  {
+                    "expr": "sum(rate(http_client_requests_seconds_sum{job=\"backend\", client_name=\"module-service\"}[1m])) by (namespace) / sum(rate(http_client_requests_seconds_count{job=\"backend\", client_name=\"module-service\"}[1m])) by (namespace)",
+                    "legendFormat": "{{namespace}}",
+                    "refId": "A"
+                  }
+                ]
+              },
+              {
+                "id": 11,
+                "title": "Circuit Breaker State",
+                "type": "timeseries",
+                "gridPos": {
+                  "h": 8,
+                  "w": 8,
+                  "x": 16,
+                  "y": 35
+                },
+                "fieldConfig": {
+                  "defaults": {
+                    "unit": "short"
+                  },
+                  "overrides": []
+                },
+                "targets": [
+                  {
+                    "expr": "max(resilience4j_circuitbreaker_state{job=\"backend\", name=\"moduleService\"} == 1) by (namespace, state)",
+                    "legendFormat": "{{namespace}} {{state}}",
+                    "refId": "A"
+                  }
+                ],
+                "description": "1 = the breaker is in this state (closed / open / half_open)"
+              },
+              {
+                "id": 12,
+                "title": "Retries",
+                "type": "timeseries",
+                "gridPos": {
+                  "h": 8,
+                  "w": 24,
+                  "x": 0,
+                  "y": 43
+                },
+                "fieldConfig": {
+                  "defaults": {
+                    "unit": "short"
+                  },
+                  "overrides": []
+                },
+                "targets": [
+                  {
+                    "expr": "sum(increase(resilience4j_retry_calls_total{job=\"backend\", name=\"moduleService\"}[5m])) by (namespace, kind)",
+                    "legendFormat": "{{namespace}} {{kind}}",
                     "refId": "A"
                   }
                 ]

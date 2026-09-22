@@ -124,3 +124,41 @@ variable "database_user_name" {
   type        = string
   default     = "user_mgmt_service"
 }
+
+# --- Managed MySQL for the module_service (mysql.tf) -------------------------
+
+variable "module_database_cluster_name" {
+  description = "Name of the managed MySQL cluster used by the module_service."
+  type        = string
+  default     = "module-service-mysql"
+}
+
+variable "module_database_version" {
+  description = "MySQL version (`doctl databases options versions mysql`)."
+  type        = string
+  default     = "8.4"
+}
+
+variable "module_database_size" {
+  description = "DigitalOcean managed database size slug - smallest tier."
+  type        = string
+  default     = "db-s-1vcpu-1gb"
+}
+
+variable "module_staging_database_name" {
+  description = "Logical MySQL database for the staging module_service."
+  type        = string
+  default     = "module_service_staging"
+}
+
+variable "module_prod_database_name" {
+  description = "Logical MySQL database for the prod module_service."
+  type        = string
+  default     = "module_service_prod"
+}
+
+variable "module_database_user_name" {
+  description = "MySQL user of the module_service (shared by staging and prod, same reasoning as database_user_name)."
+  type        = string
+  default     = "module_service"
+}

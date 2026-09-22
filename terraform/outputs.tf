@@ -34,3 +34,31 @@ output "prod_database_name" {
   description = "values.yaml's database.name (prod is the base default, staging overrides it - see helm/user-mgmt-service/values.yaml)."
   value       = digitalocean_database_db.prod.name
 }
+
+# --- module_service MySQL (mysql.tf) ----------------------------------------
+
+output "module_database_host" {
+  description = "Private hostname of the module_service MySQL - moduleService.database.host in values.yaml."
+  value       = digitalocean_database_cluster.mysql.private_host
+}
+
+output "module_database_port" {
+  description = "moduleService.database.port in values.yaml."
+  value       = digitalocean_database_cluster.mysql.port
+}
+
+output "module_database_user" {
+  description = "module_service MySQL user - moduleService.database.user in values.yaml."
+  value       = digitalocean_database_user.module_service.name
+}
+
+output "module_database_password" {
+  description = "module_service MySQL password - module-service-secret's DB_PASSWORD (GitHub secret MODULE_SERVICE_DB_PASSWORD). Run `terraform output -raw module_database_password` deliberately."
+  value       = digitalocean_database_user.module_service.password
+  sensitive   = true
+}
+
+output "module_database_ca_certificate" {
+  description = "CA certificate of the MySQL cluster - moduleService.database.caCertificate in values.yaml (public)."
+  value       = data.digitalocean_database_ca.mysql.certificate
+}

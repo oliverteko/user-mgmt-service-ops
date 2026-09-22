@@ -45,6 +45,8 @@ backend:
   # a rolling-update surge pod each, 9 pods x 2 = 18 still fits. Logins are
   # bcrypt-bound, not DB-bound, so 2 is plenty.
   dbPoolSize: 2
+  # module_service REST API, via its Kubernetes Service (templates/module-service-deployment.yaml)
+  moduleServiceUrl: "http://module-service:8080"
   probes:
     # httpGet against actuator's health groups (management.endpoint.health.probes.enabled=true,
     # app repo application.properties; /actuator/health/** permitAll'd in
@@ -117,6 +119,71 @@ frontend:
     # (frontend/app/api/*/route.ts) - the browser never talks to the backend
     # directly, so no public/build-time API URL is needed at all.
     internalApiUrl: "http://backend:8080"
+# module_service (Python/FastAPI) - image built by the app repo's
+# build-and-push.yml from module_service/, tag bumped by its promote job.
+# Data lives in its own DigitalOcean Managed MySQL (../../terraform/mysql.tf);
+# the password comes from the Secret `secretName` (key DB_PASSWORD, created by
+# argocd-bootstrap.yml, never in git) - only this Deployment mounts it.
+moduleService:
+  enabled: true
+  image:
+    repository: ghcr.io/oliverteko/user-mgmt-service-module
+    tag: db052c2a990fc1d69dfd6b571140025f16788be3
+    pullPolicy: IfNotPresent
+  replicaCount: 2
+  service:
+    port: 8080
+  # Vertical scaling: one uvicorn process per pod, sized so it stays stable
+  # under load - see the load test numbers in ../../loadtest/README.md.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  probes:
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+    startupFailureThreshold: 30
+  logLevel: INFO
+  secretName: module-service-secret
+  database:
+    host: "private-module-service-mysql-do-user-42390838-0.f.db.ondigitalocean.com" # terraform output module_database_host
+    port: 25060 # terraform output module_database_port
+    name: module_service_prod
+    user: module_service # terraform output module_database_user
+    # terraform output -raw module_database_ca_certificate (public)
+    caCertificate: |
+      -----BEGIN CERTIFICATE-----
+      MIIERDCCAqygAwIBAgIUaOL7xb00Z+mAGkVBAvBHVgY8IGIwDQYJKoZIhvcNAQEM
+      BQAwOjE4MDYGA1UEAwwvZmE2MmM2OTQtMTRhZi00MGQ1LWIwNDMtNDdjOWNiNDhk
+      M2NkIFByb2plY3QgQ0EwHhcNMjYwOTIxMTE1MjU4WhcNMzYwOTE4MTE1MjU4WjA6
+      MTgwNgYDVQQDDC9mYTYyYzY5NC0xNGFmLTQwZDUtYjA0My00N2M5Y2I0OGQzY2Qg
+      UHJvamVjdCBDQTCCAaIwDQYJKoZIhvcNAQEBBQADggGPADCCAYoCggGBALMRWwMp
+      NkNhe65ypObKdtwpByQmBl+9BgEVGTriPgftfFJxI8C5KFI26ZPgVXsHEKVyP5od
+      TCxDfG8pcFfwmmhaBPD5SFGp0kHeJu9fXCL1NhqesIa8w4h5WgrY+DPotTJ282PR
+      dm5yvIbiwCAB7dAnXWwEMJW6ay4MhqlwBq6c/upLKhcGdoEPC+KyCppV88I7oppk
+      vgzoH8yJZJ6FyoqcaxlhKcqDoabXFAHzX1NCUrpHo+rdfU1qoaSZGqpVvSff/A9M
+      0SCWfq9m9KRZXueTgYi+vyRBjIEgSCs5ixy/m1xAKyDMoXYgbNnPZmLkHZQLxgKy
+      ZGf0yU2rGOZla4VazR+knVfk9PvgsuUpsfF1HkJ4gJd9frYaGdjjlFf5LQiZaVWB
+      0/0lR8Cb1cUrxjfqhfkyKrKgmuzaYFIZKCQj6FHcxo25FnJNcppmFl6QuLMVeE+V
+      uhqGdXD/I1vRa04YVplTgkmYaScHC3w+w5mrGVhLzEYAGRYuoJxlgqeowwIDAQAB
+      o0IwQDAdBgNVHQ4EFgQU+IOGfPas/aCi9fbd17BxPvwSYv8wEgYDVR0TAQH/BAgw
+      BgEB/wIBADALBgNVHQ8EBAMCAQYwDQYJKoZIhvcNAQEMBQADggGBADDjhMXRhVM1
+      /BS5ECz+hClJBOy+XW/NqRIAwklWnGOkVgKTC1cpCPh67ZDFKTovjUMtKLU7KHJJ
+      B9qvuL6sBTCkIBm+ST0Vs6MVwaD5+0OHFosctFckvHB6VIAi7Pbd7tnzhAtZGKXu
+      TIR09oeFxQoMCNyEXRakdIYW2ca/qKKjm4oyC7RKvIszxBycD3Ti11Tg5HmRQ/EA
+      jjzCX/Fa6PB7zNw9zFQnptdGwkvVfr3v3OmwTBzLOjTRVxPnX+O/Qw/VIsusn91h
+      XjyWq5Vh4q9LYo+eNGjYV8C5yq1FLJwitjX9Qw9EarVn2E6MtfilLXj7gqN94N/3
+      ZQmYvUO94H+jaHtpk92KrN78YA6a1GH2grShAFhMcSrSHyVM047DqqQB0Lh90ijR
+      izFxL8/eRqXzsC+pkUzlEurxBGCabSc2/aiWNe57cV/MRikK/93Bi+GE1nxRjsTu
+      zmzb1Jqd4xehG9Kko4JJYritcQ4Rau7GSEObB0GlFq7vbRTjbkFFJg==
+      -----END CERTIFICATE-----
+  pdb:
+    enabled: true
+    minAvailable: 1
 config:
   springJpaHibernateDdlAuto: update
   jwtIssuer: Spring
@@ -147,12 +214,14 @@ ingress:
 # values-staging.yaml overrides with tighter numbers.
 resourceQuota:
   enabled: true
+  # prod at full scale-out: 4 backend + 2 frontend + 2 module-service, plus
+  # one rolling-update surge pod
   requests:
     cpu: "2"
-    memory: 2Gi
+    memory: 3Gi
   limits:
-    cpu: "4"
-    memory: 4Gi
+    cpu: "5"
+    memory: 5Gi
 # Scraped by the kube-prometheus-stack Prometheus instance (installed
 # separately, see ../kube-prometheus-stack/values.yaml) via the ServiceMonitor
 # below. Requires management.endpoints.web.exposure.include=health,prometheus
@@ -171,6 +240,9 @@ monitoring:
 networkPolicy:
   enabled: true
   ingressNamespace: traefik
-moduleService:
-  image:
-    tag: db052c2a990fc1d69dfd6b571140025f16788be3
+  # Egress the backend must NOT reach - the module_service's managed MySQL
+  # (private IP of `terraform output module_database_host`, resolved inside
+  # the cluster: `kubectl run -it --rm dns --image=busybox -- nslookup <host>`).
+  # Empty = no backend egress policy.
+  backendEgressDenyCidrs:
+    - 10.114.0.8/32 # module-service-mysql (private)

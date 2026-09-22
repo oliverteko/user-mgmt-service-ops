@@ -82,6 +82,9 @@ spec:
                 configMapKeyRef:
                   name: app-config
                   key: JWT_EXPIRATION_MILLIS
+            # REST calls to the module_service go through its Kubernetes Service
+            - name: MODULE_SERVICE_URL
+              value: {{ .Values.backend.moduleServiceUrl | quote }}
             - name: SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE
               value: {{ .Values.backend.dbPoolSize | quote }}
             {{- with .Values.backend.javaToolOptions }}

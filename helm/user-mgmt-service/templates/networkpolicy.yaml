@@ -6,9 +6,11 @@
 # Traefik namespace stays allowed so the shared Ingress controller can still
 # reach the frontend; from the monitoring namespace so Prometheus can scrape
 # pods directly (ServiceMonitor scrapes bypass the Service); intra-namespace
-# traffic (frontend->backend) is unaffected. Only Ingress is restricted, so
-# the backend's outbound connection to the managed PostgreSQL database
-# (external to the cluster, see ../../terraform/database.tf) isn't touched.
+# traffic (frontend->backend) is unaffected.
+#
+# The module_service is excluded here and gets its own, narrower policy below
+# (NetworkPolicies are additive - if this one also selected it, every pod in
+# the namespace could reach it).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -17,7 +19,12 @@ metadata:
   labels:
     {{- include "user-mgmt-service.labels" . | nindent 4 }}
 spec:
-  podSelector: {}
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: NotIn
+        values:
+          - module-service
   policyTypes:
     - Ingress
   ingress:
@@ -31,4 +38,74 @@ spec:
             matchLabels:
               kubernetes.io/metadata.name: {{ .Values.monitoring.namespace }}
         {{- end }}
+{{- if .Values.moduleService.enabled }}
+---
+# The module_service's API is only for the backend (plus Prometheus scraping
+# /metrics) - not the frontend, not other namespaces, not the Ingress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: module-service-ingress
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "user-mgmt-service.componentLabels" (dict "component" "module-service" "context" $) | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "user-mgmt-service.componentSelectorLabels" (dict "component" "module-service" "context" $) | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "user-mgmt-service.componentSelectorLabels" (dict "component" "backend" "context" $) | nindent 14 }}
+        {{- if .Values.monitoring.enabled }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.monitoring.namespace }}
+        {{- end }}
+      ports:
+        - port: http
+{{- end }}
+{{- with .Values.networkPolicy.backendEgressDenyCidrs }}
+---
+# The backend must not reach the module_service's MySQL directly - only via
+# the module_service's REST API. It doesn't have the credentials anyway
+# (module-service-secret is only mounted by the module_service); this also
+# blocks it at the network level. Everything else stays reachable: pods in
+# this namespace (module-service), cluster DNS, and the outside world incl.
+# the backend's own managed PostgreSQL - minus the CIDRs listed in
+# networkPolicy.backendEgressDenyCidrs (the MySQL cluster's private IP).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-egress
+  namespace: {{ $.Values.namespace }}
+  labels:
+    {{- include "user-mgmt-service.componentLabels" (dict "component" "backend" "context" $) | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "user-mgmt-service.componentSelectorLabels" (dict "component" "backend" "context" $) | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector: {}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              {{- toYaml . | nindent 14 }}
+{{- end }}
 {{- end }}

@@ -14,4 +14,24 @@ spec:
     - port: http
       path: /actuator/prometheus
       interval: {{ .Values.monitoring.scrapeInterval }}
+{{- if .Values.moduleService.enabled }}
+---
+# module_service: http_requests_total / http_request_duration_seconds from
+# its /metrics endpoint (app/metrics.py in the app repo's module_service/)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: module-service
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "user-mgmt-service.componentLabels" (dict "component" "module-service" "context" $) | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "user-mgmt-service.componentSelectorLabels" (dict "component" "module-service" "context" $) | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.monitoring.scrapeInterval }}
+{{- end }}
 {{- end }}

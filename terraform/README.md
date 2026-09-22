@@ -92,6 +92,15 @@ After it exists:
    Das `doadmin`-Passwort steht im Terraform-State (`digitalocean_database_cluster.postgres.password`) bzw. im DO-Control-Panel - nur temporär als Kubernetes Secret für diesen Pod anlegen und danach wieder löschen.
 5. `helm lint`/`helm template` the chart again once `database.host` is a real value (not the `REPLACE_ME` placeholder) to confirm the rendered `SPRING_DATASOURCE_URL` looks right.
 
+## Managed MySQL for the module_service
+
+[`mysql.tf`](mysql.tf) - a second managed database cluster (MySQL 8.4, smallest size), created by Terraform like the PostgreSQL one: one database per environment (`module_service_staging` / `module_service_prod`), one user `module_service`, a firewall trusting only the DOKS cluster, same VPC.
+
+- Only the module_service gets the credentials: `terraform output -raw module_database_password` → Kubernetes Secret `module-service-secret` (key `DB_PASSWORD`) in both namespaces, via GitHub secret `MODULE_SERVICE_DB_PASSWORD` + `argocd-bootstrap.yml`. The user_mgmt_service backend never sees them.
+- `terraform output module_database_host` → `moduleService.database.host`, `terraform output -raw module_database_ca_certificate` → `moduleService.database.caCertificate` in `helm/user-mgmt-service/values.yaml` (the connection is TLS-only and verified against this CA).
+- The MySQL private IP (resolved in the cluster) → `networkPolicy.backendEgressDenyCidrs`, so the backend can't reach MySQL on the network level either.
+- No schema step: the module_service creates its tables and seed modules on startup.
+
 ## Validated so far (scaffold phase, before real credentials)
 
 Without real credentials, from this environment: `terraform fmt -check`, `terraform init`, and `terraform validate` all pass for both the cluster import and the database resources. `terraform plan` (with dummy `do_token`/`cluster_id`/`region`) was smoke-tested to confirm the resource graph, provider wiring, and DigitalOcean API calls all fire correctly - the VPC data source lookup reaches a real `401 Unable to authenticate you`, exactly as expected without a real token; the cluster import still reports "Configuration for import target does not exist" as expected (that's the cluster-import step not yet run, unrelated to the database resources being correct).
