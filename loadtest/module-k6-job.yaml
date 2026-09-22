@@ -1,0 +1,56 @@
+# k6 load test for the module_service (module-loadtest.js), via the backend.
+# Not managed by ArgoCD (deliberately - a load test is a one-off run, not a
+# continuously-reconciled app). Apply/delete manually against whichever
+# namespace you're targeting - see loadtest/README.md.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k6-module-loadtest
+  labels:
+    app.kubernetes.io/name: k6-module-loadtest
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: k6-module-loadtest
+    spec:
+      restartPolicy: Never
+      # Required by the require-run-as-nonroot Kyverno policy
+      # (../kyverno-policies) - the k6 image already runs as a non-root user.
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: k6
+          image: grafana/k6:1.7.0
+          args:
+            - run
+            - /scripts/module-loadtest.js
+            - -o
+            - experimental-prometheus-rw
+          env:
+            # In-namespace Service DNS - same host the frontend already uses
+            # (INTERNAL_API_URL), so this exercises the real Service
+            # round-robin across whatever replicas the HPA currently has up.
+            - name: TARGET_HOST
+              value: "http://backend:8080"
+            - name: K6_PROMETHEUS_RW_SERVER_URL
+              value: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/write"
+            - name: K6_PROMETHEUS_RW_TREND_STATS
+              value: "p(95),p(99),min,max"
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: script
+          configMap:
+            name: k6-module-loadtest-script
