@@ -20,7 +20,7 @@ database:
 backend:
   image:
     repository: ghcr.io/oliverteko/user-mgmt-service-backend
-    tag: db052c2a990fc1d69dfd6b571140025f16788be3
+    tag: 9833dd5c4d7ba9b2a93f5826f064b3a1975a1256
     pullPolicy: IfNotPresent
   replicaCount: 2
   service:
@@ -85,7 +85,7 @@ backend:
 frontend:
   image:
     repository: ghcr.io/oliverteko/user-mgmt-service-frontend
-    tag: db052c2a990fc1d69dfd6b571140025f16788be3
+    tag: 9833dd5c4d7ba9b2a93f5826f064b3a1975a1256
     pullPolicy: IfNotPresent
   # Static replica count (no HPA - only the backend autoscales, see above).
   # >1 so the PDB below is meaningful and Traefik actually load-balances
@@ -128,7 +128,7 @@ moduleService:
   enabled: true
   image:
     repository: ghcr.io/oliverteko/user-mgmt-service-module
-    tag: db052c2a990fc1d69dfd6b571140025f16788be3
+    tag: 9833dd5c4d7ba9b2a93f5826f064b3a1975a1256
     pullPolicy: IfNotPresent
   replicaCount: 2
   service:
