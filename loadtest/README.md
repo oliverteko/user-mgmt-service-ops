@@ -54,3 +54,27 @@ kubectl delete job k6-login-loadtest -n user-mgmt-staging --ignore-not-found
 ```
 
 (`ttlSecondsAfterFinished: 3600` on the Job also auto-deletes it an hour after it finishes, if you forget.)
+
+## Module service load test (Task 6, vertical scaling)
+
+[`module-loadtest.js`](module-loadtest.js) / [`module-k6-job.yaml`](module-k6-job.yaml) - 40 VUs (ramp 30s to 10, 1m to 40, hold 3m) that each list the modules (`GET /modules`) and assign one to a test user (`PUT /users/{id}/modules/{moduleId}`), **through the backend** like a real client (the module_service only accepts traffic from the backend, NetworkPolicy `module-service-ingress`). Each iteration = 3 module_service requests behind the backend's timeout/retry/circuit breaker.
+
+```bash
+kubectl create configmap k6-module-loadtest-script -n user-mgmt-staging   --from-file=loadtest/module-loadtest.js --dry-run=client -o yaml | kubectl apply -f -
+kubectl delete job k6-module-loadtest -n user-mgmt-staging --ignore-not-found
+kubectl apply -n user-mgmt-staging -f loadtest/module-k6-job.yaml
+```
+
+Watch Grafana "user-mgmt-service / Module Service" while it runs. Results on staging (1 module_service replica, 2026-09-22):
+
+| | limit 500m CPU / 256Mi | limit **1 CPU** / 256Mi (current) |
+|---|---|---|
+| Requests in 5 min / throughput | 5 938 / 19.6 req/s | 7 156 / 23.7 req/s |
+| Failed requests / restarts | 0 / 0 | 0 / 0 |
+| module_service CPU on the plateau | pinned at 500m | ~670m (below the limit) |
+| module_service CPU throttled | 51 % of periods | 0.2 % |
+| module_service server p95 | 0.22 s | 0.24 s |
+| module_service memory | 64 -> 72 Mi | 64 -> 72 Mi |
+| end-to-end median / p95 (k6) | 1.07 s / 3.61 s | 0.70 s / 3.32 s |
+
+With 1 CPU the module_service is no longer the bottleneck. The remaining end-to-end latency (and the crossed `p(95)<1000` k6 threshold) comes from the backend waiting for its own PostgreSQL connections - `backend.dbPoolSize: 2`, kept small because the smallest managed PostgreSQL only allows ~22 connections for staging + prod together (Hikari acquire avg 0.44 s, up to 29 requests pending). Fixing that would need a larger database plan or a DigitalOcean connection pool (PgBouncer), not more module_service resources.

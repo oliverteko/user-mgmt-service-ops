@@ -123,6 +123,16 @@ PostgreSQL läuft als [DigitalOcean Managed Database](https://www.digitalocean.c
 - Erreichbarkeit: die Managed Database erlaubt per Firewall (`digitalocean_database_firewall` in `database.tf`) ausschliesslich Verbindungen vom DOKS-Cluster selbst (Rule-Type `k8s`, referenziert per Cluster-UUID) — kein `NetworkPolicy`-Eintrag in diesem Chart nötig, da `templates/networkpolicy.yaml` nur *Ingress* einschränkt, nicht *Egress*.
 - `postgres-deployment.yaml`, `postgres-service.yaml`, `postgres-pvc.yaml` sowie der komplette `postgres.*`-Values-Block existieren nicht mehr in diesem Chart.
 
+## Module Service (Aufgabe 6)
+
+`moduleService.*` deployt den Python-`module_service` (Image aus dem App-Repo, `module_service/`) mit eigener DigitalOcean Managed MySQL ([`../../terraform/mysql.tf`](../../terraform/mysql.tf)):
+
+- **`templates/module-service-deployment.yaml`** — Deployment, Service `module-service`, CA-Zertifikat der MySQL als ConfigMap (TLS mit Zertifikatsprüfung), PDB (nur Prod). Probes auf `/health/live` bzw. `/health/ready` (letztere prüft die DB-Verbindung). Non-root (UID 10001), erfüllt alle Kyverno-Policies.
+- **Credentials** — nur dieses Deployment liest das Secret `module-service-secret` (`DB_PASSWORD`, von `argocd-bootstrap.yml` angelegt). Der Backend-Pod hat keine MySQL-Zugangsdaten und zusätzlich per NetworkPolicy `backend-egress` keinen Netzwerkzugang zur MySQL (`networkPolicy.backendEgressDenyCidrs`).
+- **Nur das Backend darf den module_service aufrufen** — NetworkPolicy `module-service-ingress` (plus Prometheus). Das Backend ruft ihn synchron via REST über den Service `http://module-service:8080` auf, mit Timeout, Retry und Circuit Breaker (App-Repo, `ModuleServiceClient`).
+- **Monitoring** — ServiceMonitor `module-service` scrapt `/metrics`; Grafana-Dashboard "user-mgmt-service / Module Service" (Request Rate, Response Time, Error Rate, CPU/Memory vs. Limits, Circuit Breaker, Retries).
+- **Vertikale Skalierung** — `moduleService.resources` (1 CPU / 256Mi Limit) sind aus einem k6-Lasttest abgeleitet, siehe [`../../loadtest/README.md`](../../loadtest/README.md#module-service-load-test-task-6-vertical-scaling).
+
 ## Hochverfügbarkeit & Autoscaling
 
 - **`backend.autoscaling`** — ein `HorizontalPodAutoscaler` (`templates/hpa.yaml`) skaliert `backend` zwischen `minReplicas` und `maxReplicas` anhand von CPU-Auslastung (`targetCPUUtilizationPercentage`). Braucht `metrics-server` im Cluster (installiert von `argocd-bootstrap.yml`). In Prod `2→4` Replicas, in Staging `1→3` — in Staging bewusst aktiviert (nicht deaktiviert wie ursprünglich), damit der [k6 Load Test](../../loadtest/README.md) dort tatsächlich etwas zu skalieren hat, ohne künstliche Last gegen Prod zu erzeugen. Solange `backend.autoscaling.enabled: true` ist, lässt das Deployment-Template `spec.replicas` bewusst weg, damit Helm dem HPA nicht ständig den Wert zurücksetzt; sowohl `argocd/application-staging.yaml` als auch `argocd/application-prod.yaml` ignorieren dieses Feld zusätzlich explizit (`ignoreDifferences`), damit ArgoCDs `selfHeal` die Skalierung nicht revertiert.

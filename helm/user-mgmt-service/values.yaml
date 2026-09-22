@@ -133,8 +133,13 @@ moduleService:
   replicaCount: 2
   service:
     port: 8080
-  # Vertical scaling: one uvicorn process per pod, sized so it stays stable
-  # under load - see the load test numbers in ../../loadtest/README.md.
+  # Vertical scaling: one uvicorn process per pod, sized from the k6 module
+  # load test (../../loadtest/README.md, 40 VUs through the backend). With a
+  # 500m limit it was CPU-bound (throttled 51% of the time, pinned at the
+  # limit); with 1 CPU throttling dropped to 0.2% at ~670m peak usage and
+  # server p95 stayed < 0.25s. Memory peaked at ~72Mi, so 256Mi leaves ample
+  # headroom. More than ~1 CPU wouldn't help a single Python process (GIL) -
+  # beyond that, add uvicorn workers or replicas.
   resources:
     requests:
       cpu: 200m
