@@ -50,6 +50,12 @@ alertmanager:
       group_wait: 30s
       group_interval: 5m
       repeat_interval: 4h
+      routes:
+        # Fires permanently by design (it only inhibits info-level alerts) -
+        # not a notification. The chart adds the same for Watchdog itself.
+        - receiver: "null"
+          matchers:
+            - alertname = "InfoInhibitor"
     receivers:
       - name: generic-webhook
         webhook_configs:
@@ -63,6 +69,21 @@ alertmanager:
       # reproduces once the Alertmanager Operator actually loads the
       # rendered secret - `helm template` alone won't catch it.
       - name: "null"
+
+# DOKS runs the control plane (scheduler, controller-manager, etcd) managed
+# by DigitalOcean and not scrapeable from inside the cluster, and uses Cilium
+# instead of kube-proxy. Left enabled, the chart scrapes targets that can
+# never exist and fires KubeSchedulerDown / KubeControllerManagerDown /
+# KubeProxyDown permanently - false alarms on the notification channel.
+# Disabling them drops both the scrape config and those rules.
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false
 
 grafana:
   # Ships the chart's curated dashboards (Kubernetes / Compute Resources /
