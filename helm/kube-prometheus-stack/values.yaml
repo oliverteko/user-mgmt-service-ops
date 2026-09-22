@@ -51,23 +51,22 @@ alertmanager:
       group_interval: 5m
       repeat_interval: 4h
       routes:
-        # Fires permanently by design (it only inhibits info-level alerts) -
-        # not a notification. The chart adds the same for Watchdog itself.
+        # Both fire permanently by design (Watchdog = "the alerting pipeline
+        # works" heartbeat, InfoInhibitor = mutes info-level alerts) - not
+        # notifications. Setting `routes` replaces the chart's default list,
+        # which routed them to "null", so both have to be listed here.
         - receiver: "null"
           matchers:
-            - alertname = "InfoInhibitor"
+            - alertname =~ "Watchdog|InfoInhibitor"
     receivers:
       - name: generic-webhook
         webhook_configs:
           - url_file: /etc/alertmanager/secrets/alertmanager-webhook/url
             send_resolved: true
-      # The chart always appends a "Watchdog -> null" route to whatever
-      # route we provide (silences Prometheus's synthetic always-firing
-      # liveness alert) - without a receiver actually named "null" to match
-      # it, Alertmanager's own config validation rejects the whole config:
-      # "undefined receiver \"null\" used in route". Found live, only
-      # reproduces once the Alertmanager Operator actually loads the
-      # rendered secret - `helm template` alone won't catch it.
+      # Target of the Watchdog/InfoInhibitor route above. (Without our own
+      # `routes` the chart adds a default Watchdog -> "null" route, and
+      # Alertmanager rejects the whole config if no receiver of that name
+      # exists - found live.)
       - name: "null"
 
 # DOKS runs the control plane (scheduler, controller-manager, etcd) managed
